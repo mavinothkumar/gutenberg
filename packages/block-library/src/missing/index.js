@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
 import { getBlockType } from '@wordpress/blocks';
 
 /**
@@ -17,20 +17,15 @@ export { metadata, name };
 
 export const settings = {
 	name,
-	title: __( 'Unsupported' ),
+	title: _x( 'Unsupported', 'block title' ),
 	description: __( 'Your site doesn’t include support for this block.' ),
-	supports: {
-		className: false,
-		customClassName: false,
-		inserter: false,
-		html: false,
-		reusable: false,
-	},
 	__experimentalLabel( attributes, { context } ) {
 		if ( context === 'accessibility' ) {
 			const { originalName } = attributes;
 
-			const originalBlockType = originalName ? getBlockType( originalName ) : undefined;
+			const originalBlockType = originalName
+				? getBlockType( originalName )
+				: undefined;
 
 			if ( originalBlockType ) {
 				return originalBlockType.settings.title || originalName;

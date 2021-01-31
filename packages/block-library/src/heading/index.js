@@ -6,7 +6,8 @@ import { isEmpty } from 'lodash';
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { heading as icon } from '@wordpress/icons';
+import { __, _x, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -22,15 +23,12 @@ const { name } = metadata;
 export { metadata, name };
 
 export const settings = {
-	title: __( 'Heading' ),
-	description: __( 'Introduce new sections and organize content to help visitors (and search engines) understand the structure of your content.' ),
-	icon: 'heading',
+	title: _x( 'Heading', 'block title' ),
+	description: __(
+		'Introduce new sections and organize content to help visitors (and search engines) understand the structure of your content.'
+	),
+	icon,
 	keywords: [ __( 'title' ), __( 'subtitle' ) ],
-	supports: {
-		className: false,
-		anchor: true,
-		__unstablePasteTextInline: true,
-	},
 	example: {
 		attributes: {
 			content: __( 'Code is Poetry' ),
@@ -41,25 +39,27 @@ export const settings = {
 		if ( context === 'accessibility' ) {
 			const { content, level } = attributes;
 
-			return isEmpty( content ) ?
-				sprintf(
-					/* translators: accessibility text. %s: heading level. */
-					__( 'Level %s. Empty.' ),
-					level
-				) :
-				sprintf(
-					/* translators: accessibility text. 1: heading level. 2: heading content. */
-					__( 'Level %1$s. %2$s' ),
-					level,
-					content
-				);
+			return isEmpty( content )
+				? sprintf(
+						/* translators: accessibility text. %s: heading level. */
+						__( 'Level %s. Empty.' ),
+						level
+				  )
+				: sprintf(
+						/* translators: accessibility text. 1: heading level. 2: heading content. */
+						__( 'Level %1$s. %2$s' ),
+						level,
+						content
+				  );
 		}
 	},
 	transforms,
 	deprecated,
 	merge( attributes, attributesToMerge ) {
 		return {
-			content: ( attributes.content || '' ) + ( attributesToMerge.content || '' ),
+			content:
+				( attributes.content || '' ) +
+				( attributesToMerge.content || '' ),
 		};
 	},
 	edit,

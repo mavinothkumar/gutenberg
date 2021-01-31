@@ -1,11 +1,7 @@
 /**
- * External dependencies
- */
-import { get } from 'lodash';
-
-/**
  * WordPress dependencies
  */
+import { store as blocksStore } from '@wordpress/blocks';
 import { useMemo, useCallback } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { SelectControl } from '@wordpress/components';
@@ -19,28 +15,23 @@ export default function DefaultStylePicker( { blockName } ) {
 	} = useSelect(
 		( select ) => {
 			const settings = select( 'core/block-editor' ).getSettings();
-			const preferredStyleVariations = settings.__experimentalPreferredStyleVariations;
+			const preferredStyleVariations =
+				settings.__experimentalPreferredStyleVariations;
 			return {
-				preferredStyle: get(
-					preferredStyleVariations,
-					[ 'value', blockName ]
-				),
-				onUpdatePreferredStyleVariations: get(
-					preferredStyleVariations,
-					[ 'onChange' ],
-					null
-				),
-				styles: select( 'core/blocks' ).getBlockStyles( blockName ),
+				preferredStyle: preferredStyleVariations?.value?.[ blockName ],
+				onUpdatePreferredStyleVariations:
+					preferredStyleVariations?.onChange ?? null,
+				styles: select( blocksStore ).getBlockStyles( blockName ),
 			};
 		},
 		[ blockName ]
 	);
 	const selectOptions = useMemo(
-		() => ( [
+		() => [
 			{ label: __( 'Not set' ), value: '' },
 			...styles.map( ( { label, name } ) => ( { label, value: name } ) ),
-		] ),
-		[ styles ],
+		],
+		[ styles ]
 	);
 	const selectOnChange = useCallback(
 		( blockStyle ) => {
@@ -49,12 +40,14 @@ export default function DefaultStylePicker( { blockName } ) {
 		[ blockName, onUpdatePreferredStyleVariations ]
 	);
 
-	return onUpdatePreferredStyleVariations && (
-		<SelectControl
-			options={ selectOptions }
-			value={ preferredStyle || '' }
-			label={ __( 'Default Style' ) }
-			onChange={ selectOnChange }
-		/>
+	return (
+		onUpdatePreferredStyleVariations && (
+			<SelectControl
+				options={ selectOptions }
+				value={ preferredStyle || '' }
+				label={ __( 'Default Style' ) }
+				onChange={ selectOnChange }
+			/>
+		)
 	);
 }

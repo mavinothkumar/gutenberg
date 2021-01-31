@@ -3,8 +3,16 @@
  */
 import { useEffect } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useShortcut } from '@wordpress/keyboard-shortcuts';
+import {
+	useShortcut,
+	store as keyboardShortcutsStore,
+} from '@wordpress/keyboard-shortcuts';
 import { __ } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies
+ */
+import { store as editPostStore } from '../../store';
 
 function KeyboardShortcuts() {
 	const {
@@ -16,9 +24,11 @@ function KeyboardShortcuts() {
 	} = useSelect( ( select ) => {
 		const settings = select( 'core/editor' ).getEditorSettings();
 		return {
-			getBlockSelectionStart: select( 'core/block-editor' ).getBlockSelectionStart,
-			getEditorMode: select( 'core/edit-post' ).getEditorMode,
-			isEditorSidebarOpened: select( 'core/edit-post' ).isEditorSidebarOpened,
+			getBlockSelectionStart: select( 'core/block-editor' )
+				.getBlockSelectionStart,
+			getEditorMode: select( editPostStore ).getEditorMode,
+			isEditorSidebarOpened: select( editPostStore )
+				.isEditorSidebarOpened,
 			richEditingEnabled: settings.richEditingEnabled,
 			codeEditingEnabled: settings.codeEditingEnabled,
 		};
@@ -28,14 +38,15 @@ function KeyboardShortcuts() {
 		switchEditorMode,
 		openGeneralSidebar,
 		closeGeneralSidebar,
-	} = useDispatch( 'core/edit-post' );
-	const { registerShortcut } = useDispatch( 'core/keyboard-shortcuts' );
+		toggleFeature,
+	} = useDispatch( editPostStore );
+	const { registerShortcut } = useDispatch( keyboardShortcutsStore );
 
 	useEffect( () => {
 		registerShortcut( {
 			name: 'core/edit-post/toggle-mode',
 			category: 'global',
-			description: __( 'Switch between Visual editor and Code editor.' ),
+			description: __( 'Switch between visual editor and code editor.' ),
 			keyCombination: {
 				modifier: 'secondary',
 				character: 'm',
@@ -43,9 +54,19 @@ function KeyboardShortcuts() {
 		} );
 
 		registerShortcut( {
+			name: 'core/edit-post/toggle-fullscreen',
+			category: 'global',
+			description: __( 'Toggle fullscreen mode.' ),
+			keyCombination: {
+				modifier: 'secondary',
+				character: 'f',
+			},
+		} );
+
+		registerShortcut( {
 			name: 'core/edit-post/toggle-block-navigation',
 			category: 'global',
-			description: __( 'Open the block navigation menu.' ),
+			description: __( 'Open the block list view.' ),
 			keyCombination: {
 				modifier: 'access',
 				character: 'o',
@@ -70,10 +91,12 @@ function KeyboardShortcuts() {
 				modifier: 'ctrl',
 				character: '`',
 			},
-			aliases: [ {
-				modifier: 'access',
-				character: 'n',
-			} ],
+			aliases: [
+				{
+					modifier: 'access',
+					character: 'n',
+				},
+			],
 		} );
 
 		registerShortcut( {
@@ -84,10 +107,12 @@ function KeyboardShortcuts() {
 				modifier: 'ctrlShift',
 				character: '`',
 			},
-			aliases: [ {
-				modifier: 'access',
-				character: 'p',
-			} ],
+			aliases: [
+				{
+					modifier: 'access',
+					character: 'p',
+				},
+			],
 		} );
 
 		registerShortcut( {
@@ -101,22 +126,47 @@ function KeyboardShortcuts() {
 		} );
 	}, [] );
 
-	useShortcut( 'core/edit-post/toggle-mode', () => {
-		switchEditorMode( getEditorMode() === 'visual' ? 'text' : 'visual' );
-	}, { bindGlobal: true, isDisabled: ! richEditingEnabled || ! codeEditingEnabled } );
-
-	useShortcut( 'core/edit-post/toggle-sidebar', ( event ) => {
-		// This shortcut has no known clashes, but use preventDefault to prevent any
-		// obscure shortcuts from triggering.
-		event.preventDefault();
-
-		if ( isEditorSidebarOpened() ) {
-			closeGeneralSidebar();
-		} else {
-			const sidebarToOpen = getBlockSelectionStart() ? 'edit-post/block' : 'edit-post/document';
-			openGeneralSidebar( sidebarToOpen );
+	useShortcut(
+		'core/edit-post/toggle-mode',
+		() => {
+			switchEditorMode(
+				getEditorMode() === 'visual' ? 'text' : 'visual'
+			);
+		},
+		{
+			bindGlobal: true,
+			isDisabled: ! richEditingEnabled || ! codeEditingEnabled,
 		}
-	}, { bindGlobal: true } );
+	);
+
+	useShortcut(
+		'core/edit-post/toggle-fullscreen',
+		() => {
+			toggleFeature( 'fullscreenMode' );
+		},
+		{
+			bindGlobal: true,
+		}
+	);
+
+	useShortcut(
+		'core/edit-post/toggle-sidebar',
+		( event ) => {
+			// This shortcut has no known clashes, but use preventDefault to prevent any
+			// obscure shortcuts from triggering.
+			event.preventDefault();
+
+			if ( isEditorSidebarOpened() ) {
+				closeGeneralSidebar();
+			} else {
+				const sidebarToOpen = getBlockSelectionStart()
+					? 'edit-post/block'
+					: 'edit-post/document';
+				openGeneralSidebar( sidebarToOpen );
+			}
+		},
+		{ bindGlobal: true }
+	);
 
 	return null;
 }

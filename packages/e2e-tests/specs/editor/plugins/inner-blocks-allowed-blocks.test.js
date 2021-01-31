@@ -7,12 +7,13 @@ import {
 	deactivatePlugin,
 	getAllBlockInserterItemTitles,
 	insertBlock,
-	openAllBlockInserterCategories,
 	openGlobalBlockInserter,
+	closeGlobalBlockInserter,
 } from '@wordpress/e2e-test-utils';
 
-describe( 'Allowed Blocks Setting on InnerBlocks ', () => {
-	const paragraphSelector = '.block-editor-rich-text__editable.wp-block-paragraph';
+describe( 'Allowed Blocks Setting on InnerBlocks', () => {
+	const paragraphSelector =
+		'.block-editor-rich-text__editable[data-type="core/paragraph"]';
 	beforeAll( async () => {
 		await activatePlugin( 'gutenberg-test-innerblocks-allowed-blocks' );
 	} );
@@ -29,11 +30,11 @@ describe( 'Allowed Blocks Setting on InnerBlocks ', () => {
 		const parentBlockSelector = '[data-type="test/allowed-blocks-unset"]';
 		const childParagraphSelector = `${ parentBlockSelector } ${ paragraphSelector }`;
 		await insertBlock( 'Allowed Blocks Unset' );
+		await closeGlobalBlockInserter();
 		await page.waitForSelector( childParagraphSelector );
 		await page.click( childParagraphSelector );
 		await openGlobalBlockInserter();
-		await openAllBlockInserterCategories();
-		expect(
+		await expect(
 			( await getAllBlockInserterItemTitles() ).length
 		).toBeGreaterThan( 20 );
 	} );
@@ -42,13 +43,11 @@ describe( 'Allowed Blocks Setting on InnerBlocks ', () => {
 		const parentBlockSelector = '[data-type="test/allowed-blocks-set"]';
 		const childParagraphSelector = `${ parentBlockSelector } ${ paragraphSelector }`;
 		await insertBlock( 'Allowed Blocks Set' );
+		await closeGlobalBlockInserter();
 		await page.waitForSelector( childParagraphSelector );
 		await page.click( childParagraphSelector );
 		await openGlobalBlockInserter();
-		await openAllBlockInserterCategories();
-		expect(
-			await getAllBlockInserterItemTitles()
-		).toEqual( [
+		expect( await getAllBlockInserterItemTitles() ).toEqual( [
 			'Button',
 			'Gallery',
 			'List',
@@ -59,28 +58,25 @@ describe( 'Allowed Blocks Setting on InnerBlocks ', () => {
 
 	it( 'correctly applies dynamic allowed blocks restrictions', async () => {
 		await insertBlock( 'Allowed Blocks Dynamic' );
+		await closeGlobalBlockInserter();
 		const parentBlockSelector = '[data-type="test/allowed-blocks-dynamic"]';
 		const blockAppender = '.block-list-appender button';
 		const appenderSelector = `${ parentBlockSelector } ${ blockAppender }`;
 		await page.waitForSelector( appenderSelector );
 		await page.click( appenderSelector );
-		await openAllBlockInserterCategories();
-		expect(
-			await getAllBlockInserterItemTitles()
-		).toEqual( [
+		expect( await getAllBlockInserterItemTitles() ).toEqual( [
 			'Image',
 			'List',
 		] );
-		const insertButton = ( await page.$x(
-			`//button//span[contains(text(), 'List')]`
-		) )[ 0 ];
+		const insertButton = (
+			await page.$x( `//button//span[contains(text(), 'List')]` )
+		 )[ 0 ];
 		await insertButton.click();
 		await insertBlock( 'Image' );
+		await closeGlobalBlockInserter();
+		await page.waitForSelector( '.product[data-number-of-children="2"]' );
 		await page.click( appenderSelector );
-		await openAllBlockInserterCategories();
-		expect(
-			await getAllBlockInserterItemTitles()
-		).toEqual( [
+		expect( await getAllBlockInserterItemTitles() ).toEqual( [
 			'Gallery',
 			'Video',
 		] );

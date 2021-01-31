@@ -1,267 +1,245 @@
 /**
  * External dependencies
  */
-import { escape, upperFirst } from 'lodash';
 import classnames from 'classnames';
 
 /**
  * WordPress dependencies
  */
-import {
-	useMemo,
-	Fragment,
-	useRef,
-} from '@wordpress/element';
+import { useState } from '@wordpress/element';
 import {
 	InnerBlocks,
+	__experimentalUseInnerBlocksProps as useInnerBlocksProps,
 	InspectorControls,
 	BlockControls,
-	FontSizePicker,
-	withFontSizes,
-	__experimentalUseColors,
+	useBlockProps,
 } from '@wordpress/block-editor';
-
-import { createBlock } from '@wordpress/blocks';
-import { withSelect, withDispatch } from '@wordpress/data';
-import {
-	Button,
-	PanelBody,
-	Placeholder,
-	Spinner,
-	Toolbar,
-	ToolbarGroup,
-} from '@wordpress/components';
+import { useDispatch, withSelect, withDispatch } from '@wordpress/data';
+import { PanelBody, ToggleControl, ToolbarGroup } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
-
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import useBlockNavigator from './use-block-navigator';
-import BlockNavigationList from './block-navigation-list';
-import BlockColorsStyleSelector from './block-colors-selector';
-import * as navIcons from './icons';
+import {
+	justifyLeft,
+	justifyCenter,
+	justifyRight,
+	justifySpaceBetween,
+} from '@wordpress/icons';
+import NavigationPlaceholder from './placeholder';
+import PlaceholderPreview from './placeholder-preview';
 
 function Navigation( {
+	selectedBlockHasDescendants,
 	attributes,
-	clientId,
-	fontSize,
-	hasExistingNavItems,
-	hasResolvedPages,
-	isRequestingPages,
-	pages,
 	setAttributes,
-	setFontSize,
-	updateNavItemBlocks,
+	clientId,
+	hasExistingNavItems,
+	isImmediateParentOfSelectedBlock,
+	isSelected,
+	updateInnerBlocks,
+	className,
+	hasSubmenuIndicatorSetting = true,
+	hasItemJustificationControls = attributes.orientation === 'horizontal',
+	hasListViewModal = true,
 } ) {
-	//
-	// HOOKS
-	//
-	/* eslint-disable @wordpress/no-unused-vars-before-return */
-	const ref = useRef();
+	const navIcons = {
+		left: justifyLeft,
+		center: justifyCenter,
+		right: justifyRight,
+		'space-between': justifySpaceBetween,
+	};
 
-	const {
-		TextColor,
-		BackgroundColor,
-		InspectorControlsColorPanel,
-		ColorPanel,
-	} = __experimentalUseColors(
-		[
-			{ name: 'textColor', property: 'color' },
-			{ name: 'backgroundColor', className: 'background-color' },
-		],
+	const [ isPlaceholderShown, setIsPlaceholderShown ] = useState(
+		! hasExistingNavItems
+	);
+
+	const { selectBlock } = useDispatch( 'core/block-editor' );
+
+	const blockProps = useBlockProps( {
+		className: classnames( className, {
+			[ `items-justified-${ attributes.itemsJustification }` ]: attributes.itemsJustification,
+			'is-vertical': attributes.orientation === 'vertical',
+		} ),
+	} );
+
+	const { navigatorToolbarButton, navigatorModal } = useBlockNavigator(
+		clientId
+	);
+
+	const innerBlocksProps = useInnerBlocksProps(
 		{
-			contrastCheckers: [ { backgroundColor: true, textColor: true, fontSize: fontSize.size } ],
-			colorDetector: { targetRef: ref },
-			colorPanelProps: {
-				initialOpen: true,
+			className: 'wp-block-navigation__container',
+		},
+		{
+			allowedBlocks: [
+				'core/navigation-link',
+				'core/search',
+				'core/social-links',
+			],
+			orientation: attributes.orientation || 'horizontal',
+			renderAppender:
+				( isImmediateParentOfSelectedBlock &&
+					! selectedBlockHasDescendants ) ||
+				isSelected
+					? InnerBlocks.DefaultAppender
+					: false,
+			__experimentalAppenderTagName: 'li',
+			__experimentalCaptureToolbars: true,
+			// Template lock set to false here so that the Nav
+			// Block on the experimental menus screen does not
+			// inherit templateLock={ 'all' }.
+			templateLock: false,
+			__experimentalLayout: {
+				type: 'default',
+				alignments: [],
 			},
-		},
-		[ fontSize.size ]
+			placeholder: <PlaceholderPreview />,
+		}
 	);
 
-	/* eslint-enable @wordpress/no-unused-vars-before-return */
-	const { navigatorToolbarButton, navigatorModal } = useBlockNavigator( clientId );
+	if ( isPlaceholderShown ) {
+		return (
+			<div { ...blockProps }>
+				<NavigationPlaceholder
+					onCreate={ ( blocks, selectNavigationBlock ) => {
+						setIsPlaceholderShown( false );
+						updateInnerBlocks( blocks );
+						if ( selectNavigationBlock ) {
+							selectBlock( clientId );
+						}
+					} }
+				/>
+			</div>
+		);
+	}
 
-	// Builds navigation links from default Pages.
-	const defaultPagesNavigationItems = useMemo(
-		() => {
-			if ( ! pages ) {
-				return null;
-			}
-
-			return pages.map( ( { title, type, link: url, id } ) => (
-				createBlock( 'core/navigation-link',
-					{
-						type,
-						id,
-						url,
-						label: ! title.rendered ? __( '(no title)' ) : escape( title.rendered ),
-						title: ! title.raw ? __( '(no title)' ) : escape( title.raw ),
-						opensInNewTab: false,
-					}
-				)
-			) );
-		},
-		[ pages ]
-	);
-
-	//
-	// HANDLERS
-	//
 	function handleItemsAlignment( align ) {
 		return () => {
-			const itemsJustification = attributes.itemsJustification === align ? undefined : align;
+			const itemsJustification =
+				attributes.itemsJustification === align ? undefined : align;
 			setAttributes( {
 				itemsJustification,
 			} );
 		};
 	}
 
-	function handleCreateEmpty() {
-		const emptyNavLinkBlock = createBlock( 'core/navigation-link' );
-		updateNavItemBlocks( [ emptyNavLinkBlock ] );
-	}
-
-	function handleCreateFromExistingPages() {
-		updateNavItemBlocks( defaultPagesNavigationItems );
-	}
-
-	const hasPages = hasResolvedPages && pages && pages.length;
-
-	const blockClassNames = classnames( 'wp-block-navigation', {
-		[ `items-justification-${ attributes.itemsJustification }` ]: attributes.itemsJustification,
-		[ fontSize.class ]: fontSize.class,
-	} );
-	const blockInlineStyles = {
-		fontSize: fontSize.size ? fontSize.size + 'px' : undefined,
+	const POPOVER_PROPS = {
+		position: 'bottom right',
+		isAlternate: true,
 	};
 
-	// If we don't have existing items or the User hasn't
-	// indicated they want to automatically add top level Pages
-	// then show the Placeholder
-	if ( ! hasExistingNavItems ) {
-		return (
-			<Fragment>
-				<Placeholder
-					className="wp-block-navigation-placeholder"
-					icon="menu"
-					label={ __( 'Navigation' ) }
-					instructions={ __( 'Create a Navigation from all existing pages, or create an empty one.' ) }
-				>
-					<div
-						ref={ ref }
-						className="wp-block-navigation-placeholder__buttons"
-					>
-						<Button
-							isSecondary
-							className="wp-block-navigation-placeholder__button"
-							onClick={ handleCreateFromExistingPages }
-							disabled={ ! hasPages }
-						>
-							{ __( 'Create from all top-level pages' ) }
-						</Button>
-
-						<Button
-							isLink
-							className="wp-block-navigation-placeholder__button"
-							onClick={ handleCreateEmpty }
-						>
-							{ __( 'Create empty' ) }
-						</Button>
-					</div>
-				</Placeholder>
-			</Fragment>
-		);
-	}
-
-	// UI State: rendered Block UI
 	return (
-		<Fragment>
+		<>
 			<BlockControls>
-				<Toolbar
-					icon={ attributes.itemsJustification ? navIcons[ `justify${ upperFirst( attributes.itemsJustification ) }Icon` ] : navIcons.justifyLeftIcon }
-					label={ __( 'Change items justification' ) }
-					isCollapsed
-					controls={ [
-						{ icon: navIcons.justifyLeftIcon, title: __( 'Justify items left' ), isActive: 'left' === attributes.itemsJustification, onClick: handleItemsAlignment( 'left' ) },
-						{ icon: navIcons.justifyCenterIcon, title: __( 'Justify items center' ), isActive: 'center' === attributes.itemsJustification, onClick: handleItemsAlignment( 'center' ) },
-						{ icon: navIcons.justifyRightIcon, title: __( 'Justify items right' ), isActive: 'right' === attributes.itemsJustification, onClick: handleItemsAlignment( 'right' ) },
-					] }
-				/>
-				<ToolbarGroup>
-					{ navigatorToolbarButton }
-				</ToolbarGroup>
-
-				<BlockColorsStyleSelector
-					TextColor={ TextColor }
-					BackgroundColor={ BackgroundColor }
-				>
-					{ ColorPanel }
-				</BlockColorsStyleSelector>
-			</BlockControls>
-			{ navigatorModal }
-			<InspectorControls>
-				<PanelBody
-					title={ __( 'Navigation Structure' ) }
-				>
-					<BlockNavigationList clientId={ clientId } />
-				</PanelBody>
-				<PanelBody title={ __( 'Text Settings' ) }>
-					<FontSizePicker
-						value={ fontSize.size }
-						onChange={ setFontSize }
+				{ hasItemJustificationControls && (
+					<ToolbarGroup
+						icon={
+							attributes.itemsJustification
+								? navIcons[ attributes.itemsJustification ]
+								: navIcons.left
+						}
+						popoverProps={ POPOVER_PROPS }
+						label={ __( 'Change items justification' ) }
+						isCollapsed
+						controls={ [
+							{
+								icon: justifyLeft,
+								title: __( 'Justify items left' ),
+								isActive:
+									'left' === attributes.itemsJustification,
+								onClick: handleItemsAlignment( 'left' ),
+							},
+							{
+								icon: justifyCenter,
+								title: __( 'Justify items center' ),
+								isActive:
+									'center' === attributes.itemsJustification,
+								onClick: handleItemsAlignment( 'center' ),
+							},
+							{
+								icon: justifyRight,
+								title: __( 'Justify items right' ),
+								isActive:
+									'right' === attributes.itemsJustification,
+								onClick: handleItemsAlignment( 'right' ),
+							},
+							{
+								icon: justifySpaceBetween,
+								title: __( 'Space between items' ),
+								isActive:
+									'space-between' ===
+									attributes.itemsJustification,
+								onClick: handleItemsAlignment(
+									'space-between'
+								),
+							},
+						] }
 					/>
-				</PanelBody>
-			</InspectorControls>
-			{ InspectorControlsColorPanel }
-			<TextColor>
-				<BackgroundColor>
-					<div
-						ref={ ref }
-						className={ blockClassNames }
-						style={ blockInlineStyles }
-					>
-						{ ! hasExistingNavItems && isRequestingPages && <><Spinner /> { __( 'Loading Navigation…' ) } </> }
-
-						<InnerBlocks
-							allowedBlocks={ [ 'core/navigation-link' ] }
-							templateInsertUpdatesSelection={ false }
-							__experimentalMoverDirection={ 'horizontal' }
+				) }
+				{ hasListViewModal && (
+					<ToolbarGroup>{ navigatorToolbarButton }</ToolbarGroup>
+				) }
+			</BlockControls>
+			{ hasListViewModal && navigatorModal }
+			<InspectorControls>
+				{ hasSubmenuIndicatorSetting && (
+					<PanelBody title={ __( 'Display settings' ) }>
+						<ToggleControl
+							checked={ attributes.showSubmenuIcon }
+							onChange={ ( value ) => {
+								setAttributes( {
+									showSubmenuIcon: value,
+								} );
+							} }
+							label={ __( 'Show submenu indicator icons' ) }
 						/>
-
-					</div>
-				</BackgroundColor>
-			</TextColor>
-		</Fragment>
+					</PanelBody>
+				) }
+			</InspectorControls>
+			<nav { ...blockProps }>
+				<ul { ...innerBlocksProps } />
+			</nav>
+		</>
 	);
 }
 
 export default compose( [
-	withFontSizes( 'fontSize' ),
 	withSelect( ( select, { clientId } ) => {
 		const innerBlocks = select( 'core/block-editor' ).getBlocks( clientId );
-
-		const filterDefaultPages = {
-			parent: 0,
-			order: 'asc',
-			orderby: 'id',
-		};
-
-		const pagesSelect = [ 'core', 'getEntityRecords', [ 'postType', 'page', filterDefaultPages ] ];
-
+		const {
+			getClientIdsOfDescendants,
+			hasSelectedInnerBlock,
+			getSelectedBlockClientId,
+		} = select( 'core/block-editor' );
+		const isImmediateParentOfSelectedBlock = hasSelectedInnerBlock(
+			clientId,
+			false
+		);
+		const selectedBlockId = getSelectedBlockClientId();
+		const selectedBlockHasDescendants = !! getClientIdsOfDescendants( [
+			selectedBlockId,
+		] )?.length;
 		return {
+			isImmediateParentOfSelectedBlock,
+			selectedBlockHasDescendants,
 			hasExistingNavItems: !! innerBlocks.length,
-			pages: select( 'core' ).getEntityRecords( 'postType', 'page', filterDefaultPages ),
-			isRequestingPages: select( 'core/data' ).isResolving( ...pagesSelect ),
-			hasResolvedPages: select( 'core/data' ).hasFinishedResolution( ...pagesSelect ),
 		};
 	} ),
 	withDispatch( ( dispatch, { clientId } ) => {
 		return {
-			updateNavItemBlocks( blocks ) {
-				dispatch( 'core/block-editor' ).replaceInnerBlocks( clientId, blocks );
+			updateInnerBlocks( blocks ) {
+				if ( blocks?.length === 0 ) {
+					return false;
+				}
+				dispatch( 'core/block-editor' ).replaceInnerBlocks(
+					clientId,
+					blocks,
+					true
+				);
 			},
 		};
 	} ),

@@ -8,12 +8,12 @@ import classnames from 'classnames';
  */
 import { __ } from '@wordpress/i18n';
 import { useContext, useEffect, useState, useRef } from '@wordpress/element';
+import { upload, Icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import Dashicon from '../dashicon';
-import { DropZoneConsumer, Context } from './provider';
+import { Context, INITIAL_DROP_ZONE_STATE } from './provider';
 
 export function useDropZone( {
 	element,
@@ -22,13 +22,10 @@ export function useDropZone( {
 	onDrop,
 	isDisabled,
 	withPosition,
+	__unstableIsRelative: isRelative = false,
 } ) {
-	const { addDropZone, removeDropZone } = useContext( Context );
-	const [ state, setState ] = useState( {
-		isDraggingOverDocument: false,
-		isDraggingOverElement: false,
-		type: null,
-	} );
+	const dropZones = useContext( Context );
+	const [ state, setState ] = useState( INITIAL_DROP_ZONE_STATE );
 
 	useEffect( () => {
 		if ( ! isDisabled ) {
@@ -39,30 +36,36 @@ export function useDropZone( {
 				onHTMLDrop,
 				setState,
 				withPosition,
+				isRelative,
 			};
-			addDropZone( dropZone );
+			dropZones.add( dropZone );
 			return () => {
-				removeDropZone( dropZone );
+				dropZones.delete( dropZone );
 			};
 		}
-	}, [ isDisabled, onDrop, onFilesDrop, onHTMLDrop, withPosition ] );
+	}, [
+		isDisabled,
+		onDrop,
+		onFilesDrop,
+		onHTMLDrop,
+		withPosition,
+		isRelative,
+	] );
 
-	return state;
+	const { x, y, ...remainingState } = state;
+	let position = null;
+
+	if ( x !== null && y !== null ) {
+		position = { x, y };
+	}
+
+	return {
+		...remainingState,
+		position,
+	};
 }
 
-const DropZone = ( props ) => (
-	<DropZoneConsumer>
-		{ ( { addDropZone, removeDropZone } ) => (
-			<DropZoneComponent
-				addDropZone={ addDropZone }
-				removeDropZone={ removeDropZone }
-				{ ...props }
-			/>
-		) }
-	</DropZoneConsumer>
-);
-
-function DropZoneComponent( {
+export default function DropZoneComponent( {
 	className,
 	label,
 	onFilesDrop,
@@ -70,20 +73,23 @@ function DropZoneComponent( {
 	onDrop,
 } ) {
 	const element = useRef();
-	const {
-		isDraggingOverDocument,
-		isDraggingOverElement,
-		type,
-	} = useDropZone( { element, onFilesDrop, onHTMLDrop, onDrop } );
+	const { isDraggingOverDocument, isDraggingOverElement, type } = useDropZone(
+		{
+			element,
+			onFilesDrop,
+			onHTMLDrop,
+			onDrop,
+			__unstableIsRelative: true,
+		}
+	);
 
 	let children;
 
 	if ( isDraggingOverElement ) {
 		children = (
 			<div className="components-drop-zone__content">
-				<Dashicon
-					icon="upload"
-					size="40"
+				<Icon
+					icon={ upload }
 					className="components-drop-zone__content-icon"
 				/>
 				<span className="components-drop-zone__content-text">
@@ -94,11 +100,11 @@ function DropZoneComponent( {
 	}
 
 	const classes = classnames( 'components-drop-zone', className, {
-		'is-active': ( isDraggingOverDocument || isDraggingOverElement ) && (
-			( type === 'file' && onFilesDrop ) ||
-			( type === 'html' && onHTMLDrop ) ||
-			( type === 'default' && onDrop )
-		),
+		'is-active':
+			( isDraggingOverDocument || isDraggingOverElement ) &&
+			( ( type === 'file' && onFilesDrop ) ||
+				( type === 'html' && onHTMLDrop ) ||
+				( type === 'default' && onDrop ) ),
 		'is-dragging-over-document': isDraggingOverDocument,
 		'is-dragging-over-element': isDraggingOverElement,
 		[ `is-dragging-${ type }` ]: !! type,
@@ -110,5 +116,3 @@ function DropZoneComponent( {
 		</div>
 	);
 }
-
-export default DropZone;

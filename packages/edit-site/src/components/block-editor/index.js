@@ -1,86 +1,122 @@
 /**
  * WordPress dependencies
  */
-import { useSelect } from '@wordpress/data';
-import { useMemo, useCallback } from '@wordpress/element';
-import { uploadMedia } from '@wordpress/media-utils';
-import { useEntityProp } from '@wordpress/core-data';
-import { parse, serialize } from '@wordpress/blocks';
+import { useSelect, useDispatch } from '@wordpress/data';
+import { useCallback, useRef } from '@wordpress/element';
+import { useEntityBlockEditor } from '@wordpress/core-data';
 import {
 	BlockEditorProvider,
 	BlockEditorKeyboardShortcuts,
+	__experimentalLinkControl,
 	BlockInspector,
 	WritingFlow,
-	ObserveTyping,
 	BlockList,
-	ButtonBlockerAppender,
+	__experimentalUseResizeCanvas as useResizeCanvas,
+	__unstableUseBlockSelectionClearer as useBlockSelectionClearer,
+	__unstableUseTypingObserver as useTypingObserver,
+	__unstableUseMouseMoveTypingReset as useMouseMoveTypingReset,
+	__unstableUseEditorStyles as useEditorStyles,
+	__unstableIframe as Iframe,
 } from '@wordpress/block-editor';
+import { DropZoneProvider, Popover } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import Sidebar from '../sidebar';
+import TemplatePartConverter from '../template-part-converter';
+import NavigateToLink from '../navigate-to-link';
+import { SidebarInspectorFill } from '../sidebar';
 
-export default function BlockEditor( { settings: _settings } ) {
-	const canUserCreateMedia = useSelect( ( select ) => {
-		const _canUserCreateMedia = select( 'core' ).canUser( 'create', 'media' );
-		return _canUserCreateMedia || _canUserCreateMedia !== false;
-	}, [] );
-	const settings = useMemo( () => {
-		if ( ! canUserCreateMedia ) {
-			return _settings;
-		}
-		return {
-			..._settings,
-			mediaUpload( { onError, ...rest } ) {
-				uploadMedia( {
-					wpAllowedMimeTypes: _settings.allowedMimeTypes,
-					onError: ( { message } ) => onError( message ),
-					...rest,
-				} );
-			},
-		};
-	}, [ canUserCreateMedia, _settings ] );
-	const [ content, _setContent ] = useEntityProp(
-		'postType',
-		'wp_template',
-		'content'
+function Canvas( { body } ) {
+	useBlockSelectionClearer( body );
+	useTypingObserver( body );
+
+	return (
+		<DropZoneProvider>
+			<WritingFlow>
+				<BlockList className="edit-site-block-editor__block-list" />
+			</WritingFlow>
+		</DropZoneProvider>
 	);
-	const initialBlocks = useMemo( () => {
-		if ( typeof content !== 'function' ) {
-			const parsedContent = parse( content );
-			return parsedContent.length ? parsedContent : undefined;
-		}
-	}, [] );
-	const [ blocks = initialBlocks, setBlocks ] = useEntityProp(
-		'postType',
-		'wp_template',
-		'blocks'
+}
+
+export default function BlockEditor( { setIsInserterOpen } ) {
+	const { settings, templateType, page, deviceType } = useSelect(
+		( select ) => {
+			const {
+				getSettings,
+				getEditedPostType,
+				getPage,
+				__experimentalGetPreviewDeviceType,
+			} = select( 'core/edit-site' );
+			return {
+				settings: getSettings( setIsInserterOpen ),
+				templateType: getEditedPostType(),
+				page: getPage(),
+				deviceType: __experimentalGetPreviewDeviceType(),
+			};
+		},
+		[ setIsInserterOpen ]
 	);
-	const setContent = useCallback( ( nextBlocks ) => {
-		setBlocks( nextBlocks );
-		_setContent( serialize( nextBlocks ) );
-	}, [] );
+	const [ blocks, onInput, onChange ] = useEntityBlockEditor(
+		'postType',
+		templateType
+	);
+	const { setPage } = useDispatch( 'core/edit-site' );
+
+	const resizedCanvasStyles = useResizeCanvas( deviceType, true );
+	const ref = useRef();
+	const contentRef = useRef();
+
+	useMouseMoveTypingReset( ref );
+	// Ideally this should be moved to the place where the styles are applied (iframe)
+	const editorStylesRef = useEditorStyles( settings.styles );
+
+	// Allow scrolling "through" popovers over the canvas. This is only called
+	// for as long as the pointer is over a popover.
+	function onWheel( { deltaX, deltaY } ) {
+		contentRef.current.scrollBy( deltaX, deltaY );
+	}
+
 	return (
 		<BlockEditorProvider
 			settings={ settings }
 			value={ blocks }
-			onInput={ setBlocks }
-			onChange={ setContent }
+			onInput={ onInput }
+			onChange={ onChange }
+			useSubRegistry={ false }
 		>
 			<BlockEditorKeyboardShortcuts />
-			<Sidebar.InspectorFill>
-				<BlockInspector />
-			</Sidebar.InspectorFill>
-			<div className="editor-styles-wrapper">
-				<WritingFlow>
-					<ObserveTyping>
-						<BlockList
-							className="edit-site-block-editor__block-list"
-							renderAppender={ ButtonBlockerAppender }
+			<TemplatePartConverter />
+			<__experimentalLinkControl.ViewerFill>
+				{ useCallback(
+					( fillProps ) => (
+						<NavigateToLink
+							{ ...fillProps }
+							activePage={ page }
+							onActivePageChange={ setPage }
 						/>
-					</ObserveTyping>
-				</WritingFlow>
+					),
+					[ page ]
+				) }
+			</__experimentalLinkControl.ViewerFill>
+			<SidebarInspectorFill>
+				<BlockInspector />
+			</SidebarInspectorFill>
+			<div
+				ref={ editorStylesRef }
+				className="edit-site-visual-editor"
+				onWheel={ onWheel }
+			>
+				<Popover.Slot name="block-toolbar" />
+				<Iframe
+					style={ resizedCanvasStyles }
+					head={ window.__editorStyles.html }
+					ref={ ref }
+					contentRef={ contentRef }
+				>
+					<Canvas body={ contentRef } styles={ settings.styles } />
+				</Iframe>
 			</div>
 		</BlockEditorProvider>
 	);

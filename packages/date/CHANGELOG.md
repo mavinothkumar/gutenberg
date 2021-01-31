@@ -1,3 +1,7 @@
+<!-- Learn how to maintain this file at https://github.com/WordPress/gutenberg/tree/HEAD/packages#maintaining-changelogs. -->
+
+## Unreleased
+
 ## 3.0.1 (2018-12-12)
 
 ## 3.0.0 (2018-11-15)

@@ -23,7 +23,9 @@ describe( 'computePopoverYAxisPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverYAxisPosition( anchorRect, contentSize, 'bottom' ) ).toEqual( {
+		expect(
+			computePopoverYAxisPosition( anchorRect, contentSize, 'bottom' )
+		).toEqual( {
 			contentHeight: null,
 			popoverTop: 30,
 			yAxis: 'bottom',
@@ -45,7 +47,9 @@ describe( 'computePopoverYAxisPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverYAxisPosition( anchorRect, contentSize, 'top' ) ).toEqual( {
+		expect(
+			computePopoverYAxisPosition( anchorRect, contentSize, 'top' )
+		).toEqual( {
 			contentHeight: null,
 			popoverTop: 30,
 			yAxis: 'bottom',
@@ -67,7 +71,9 @@ describe( 'computePopoverYAxisPosition', () => {
 			height: 500,
 		};
 
-		expect( computePopoverYAxisPosition( anchorRect, contentSize, 'bottom' ) ).toEqual( {
+		expect(
+			computePopoverYAxisPosition( anchorRect, contentSize, 'bottom' )
+		).toEqual( {
 			contentHeight: 390,
 			popoverTop: 400,
 			yAxis: 'top',
@@ -89,7 +95,9 @@ describe( 'computePopoverYAxisPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverYAxisPosition( anchorRect, contentSize, 'middle' ) ).toEqual( {
+		expect(
+			computePopoverYAxisPosition( anchorRect, contentSize, 'middle' )
+		).toEqual( {
 			contentHeight: null,
 			popoverTop: 410,
 			yAxis: 'middle',
@@ -113,7 +121,9 @@ describe( 'computePopoverXAxisPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverXAxisPosition( anchorRect, contentSize, 'right' ) ).toEqual( {
+		expect(
+			computePopoverXAxisPosition( anchorRect, contentSize, 'right' )
+		).toEqual( {
 			contentWidth: null,
 			popoverLeft: 20,
 			xAxis: 'right',
@@ -135,14 +145,16 @@ describe( 'computePopoverXAxisPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverXAxisPosition( anchorRect, contentSize, 'center' ) ).toEqual( {
+		expect(
+			computePopoverXAxisPosition( anchorRect, contentSize, 'center' )
+		).toEqual( {
 			contentWidth: null,
 			popoverLeft: 20,
 			xAxis: 'right',
 		} );
 	} );
 
-	it( "should set a maxWidth if there's not enough space in any direction", () => {
+	it( "should center popover if there's not enough space in any direction", () => {
 		const anchorRect = {
 			top: 10,
 			left: 400,
@@ -157,10 +169,36 @@ describe( 'computePopoverXAxisPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverXAxisPosition( anchorRect, contentSize, 'right' ) ).toEqual( {
-			contentWidth: 614,
-			popoverLeft: 410,
-			xAxis: 'right',
+		expect(
+			computePopoverXAxisPosition( anchorRect, contentSize, 'right' )
+		).toEqual( {
+			contentWidth: null,
+			popoverLeft: 512,
+			xAxis: 'center',
+		} );
+	} );
+
+	it( 'should set the content width to the viewport width if content is too wide', () => {
+		const anchorRect = {
+			top: 10,
+			left: 400,
+			bottom: 30,
+			right: 420,
+			width: 20,
+			height: 20,
+		};
+
+		const contentSize = {
+			width: 1500,
+			height: 300,
+		};
+
+		expect(
+			computePopoverXAxisPosition( anchorRect, contentSize, 'right' )
+		).toEqual( {
+			contentWidth: 1024,
+			popoverLeft: 512,
+			xAxis: 'center',
 		} );
 	} );
 } );
@@ -181,7 +219,9 @@ describe( 'computePopoverPosition', () => {
 			height: 300,
 		};
 
-		expect( computePopoverPosition( anchorRect, contentSize, 'bottom right' ) ).toEqual( {
+		expect(
+			computePopoverPosition( anchorRect, contentSize, 'bottom right' )
+		).toEqual( {
 			contentWidth: null,
 			popoverLeft: 20,
 			xAxis: 'right',

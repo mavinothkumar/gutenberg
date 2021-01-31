@@ -30,7 +30,7 @@ class ImportForm extends Component {
 	}
 
 	onChangeFile( event ) {
-		this.setState( { file: event.target.files[ 0 ] } );
+		this.setState( { file: event.target.files[ 0 ], error: null } );
 	}
 
 	onSubmit( event ) {
@@ -71,6 +71,10 @@ class ImportForm extends Component {
 			} );
 	}
 
+	onDismissError() {
+		this.setState( { error: null } );
+	}
+
 	render() {
 		const { instanceId } = this.props;
 		const { file, isLoading, error } = this.state;
@@ -81,7 +85,10 @@ class ImportForm extends Component {
 				onSubmit={ this.onSubmit }
 			>
 				{ error && (
-					<Notice status="error">
+					<Notice
+						status="error"
+						onRemove={ () => this.onDismissError() }
+					>
 						{ error }
 					</Notice>
 				) }

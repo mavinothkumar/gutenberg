@@ -1,4 +1,8 @@
-## Master
+<!-- Learn how to maintain this file at https://github.com/WordPress/gutenberg/tree/HEAD/packages#maintaining-changelogs. -->
+
+## Unreleased
+
+## 3.7.0 (2020-02-04)
 
 ### Bug Fix
 

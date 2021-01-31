@@ -1,25 +1,24 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { rss as icon } from '@wordpress/icons';
+import { __, _x } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
+import metadata from './block.json';
 import edit from './edit';
 
-export const name = 'core/rss';
+const { name } = metadata;
+
+export { metadata, name };
 
 export const settings = {
-	title: __( 'RSS' ),
+	title: _x( 'RSS', 'block title' ),
 	description: __( 'Display entries from any RSS or Atom feed.' ),
-	icon: 'rss',
-	category: 'widgets',
+	icon,
 	keywords: [ __( 'atom' ), __( 'feed' ) ],
-	supports: {
-		align: true,
-		html: false,
-	},
 	example: {
 		attributes: {
 			feedURL: 'https://wordpress.org',

@@ -3,7 +3,7 @@ InnerBlocks
 
 InnerBlocks exports a pair of components which can be used in block implementations to enable nested block content.
 
-Refer to the [implementation of the Columns block](https://github.com/WordPress/gutenberg/tree/master/packages/block-library/src/columns) as an example resource.
+Refer to the [implementation of the Columns block](https://github.com/WordPress/gutenberg/tree/HEAD/packages/block-library/src/columns) as an example resource.
 
 ## Usage
 
@@ -11,22 +11,26 @@ In a block's `edit` implementation, render `InnerBlocks`. Then, in the `save` im
 
 ```jsx
 import { registerBlockType } from '@wordpress/blocks';
-import { InnerBlocks } from '@wordpress/block-editor';
+import { useBlockProps, InnerBlocks } from '@wordpress/block-editor';
 
 registerBlockType( 'my-plugin/my-block', {
 	// ...
 
-	edit( { className } ) {
+	edit() {
+		const blockProps = useBlockProps();
+
 		return (
-			<div className={ className }>
+			<div { ...blockProps }>
 				<InnerBlocks />
 			</div>
 		);
 	},
 
 	save() {
+		const blockProps = useBlockProps.save();
+
 		return (
-			<div>
+			<div { ...blockProps }>
 				<InnerBlocks.Content />
 			</div>
 		);
@@ -41,9 +45,10 @@ _Note:_ Because the save step will automatically apply props to the element retu
 ## Props
 
 ### `allowedBlocks`
-* **Type:** `Array<String>`
+* **Type:** `Boolean|Array<String>`
+* **Default:** `true`
 
-Allowed blocks prop should contain an array of strings, each string should contain the identifier of a block. When allowedBlocks is set it is only possible to insert blocks part of the set specified in the array.
+`allowedBlocks` can contain an array of strings, each string should contain the identifier of a block. When `allowedBlocks` is set it is only possible to insert blocks part of the set specified in the array.
 
 ```jsx
 const ALLOWED_BLOCKS = [ 'core/image', 'core/paragraph' ];
@@ -67,11 +72,20 @@ const ALLOWED_BLOCKS = [];
 
 The previous code block restricts all blocks, so only child blocks explicitly registered as compatible with this block can be inserted. If no child blocks are available: it will be impossible to insert any inner blocks.
 
+If `allowedBlocks` is set to `true`, all blocks are allowed. `false` means no blocks are allowed.
+
+### `orientation`
+* **Type:** `"horizontal"|"vertical"|undefined`
+
+Indicates whether inner blocks are shown horizontally or vertically. Use the string 'horizontal' or 'vertical' as a value. When left unspecified, defaults to 'vertical'.
+
+While this prop doesn't change any styles for the inner blocks themselves, it does display the Block Movers in the correct orientation, and also ensures drag and drop works correctly.
+
 ### `template`
 * **Type:** `Array<Array<Object>>`
 
 The template is defined as a list of block items. Such blocks can have predefined attributes, placeholder, content, etc. Block templates allow specifying a default initial state for an InnerBlocks area.
-More information about templates can be found in [template docs](/docs/developers/block-api/block-templates.md).
+More information about templates can be found in [template docs](/docs/designers-developers/developers/block-api/block-templates.md).
 
 ```jsx
 const TEMPLATE = [ [ 'core/columns', {}, [
@@ -92,7 +106,7 @@ The previous example creates an InnerBlocks area containing two columns one with
 
 ### `templateInsertUpdatesSelection`
 * **Type:** `Boolean`
-* **Default:** `true`
+* **Default:** `false`
 
 If true when child blocks in the template are inserted the selection is updated.
 If false the selection should not be updated when child blocks specified in the template are inserted.
@@ -100,7 +114,7 @@ If false the selection should not be updated when child blocks specified in the 
 ### `templateLock`
 * **Type:** `String|Boolean`
 
-Template locking of `InnerBlocks` is similar to [Custom Post Type templates locking](/docs/developers/block-api/block-templates.md#locking).
+Template locking of `InnerBlocks` is similar to [Custom Post Type templates locking](/docs/designers-developers/developers/block-api/block-templates.md#locking).
 
 Template locking allows locking the `InnerBlocks` area for the current template.
 *Options:*
@@ -152,5 +166,7 @@ Determines whether the toolbars of _all_ child Blocks (applied deeply, recursive
 
 For example, a button block, deeply nested in several levels of block `X` that utilises this property will see the button block's toolbar displayed on block `X`'s toolbar area.
 
+### `placeholder`
 
-
+* **Type:** `Function`
+* **Default:** - `undefined`. The placeholder is an optional function that can be passed in to be a rendered component placed in front of the appender. This can be used to represent an example state prior to any blocks being placed. See the Social Links for an implementation example.

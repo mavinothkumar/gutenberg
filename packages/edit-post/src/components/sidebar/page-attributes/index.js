@@ -9,22 +9,41 @@ import { get, partial } from 'lodash';
 import { __ } from '@wordpress/i18n';
 import { PanelBody, PanelRow } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
-import { PageAttributesCheck, PageAttributesOrder, PageAttributesParent, PageTemplate } from '@wordpress/editor';
+import {
+	PageAttributesCheck,
+	PageAttributesOrder,
+	PageAttributesParent,
+	PageTemplate,
+} from '@wordpress/editor';
 import { withSelect, withDispatch } from '@wordpress/data';
+
+/**
+ * Internal dependencies
+ */
+import { store as editPostStore } from '../../../store';
 
 /**
  * Module Constants
  */
 const PANEL_NAME = 'page-attributes';
 
-export function PageAttributes( { isEnabled, isOpened, onTogglePanel, postType } ) {
+export function PageAttributes( {
+	isEnabled,
+	isOpened,
+	onTogglePanel,
+	postType,
+} ) {
 	if ( ! isEnabled || ! postType ) {
 		return null;
 	}
 	return (
 		<PageAttributesCheck>
 			<PanelBody
-				title={ get( postType, [ 'labels', 'attributes' ], __( 'Page attributes' ) ) }
+				title={ get(
+					postType,
+					[ 'labels', 'attributes' ],
+					__( 'Page attributes' )
+				) }
 				opened={ isOpened }
 				onToggle={ onTogglePanel }
 			>
@@ -40,7 +59,9 @@ export function PageAttributes( { isEnabled, isOpened, onTogglePanel, postType }
 
 const applyWithSelect = withSelect( ( select ) => {
 	const { getEditedPostAttribute } = select( 'core/editor' );
-	const { isEditorPanelEnabled, isEditorPanelOpened } = select( 'core/edit-post' );
+	const { isEditorPanelEnabled, isEditorPanelOpened } = select(
+		editPostStore
+	);
 	const { getPostType } = select( 'core' );
 	return {
 		isEnabled: isEditorPanelEnabled( PANEL_NAME ),
@@ -50,14 +71,11 @@ const applyWithSelect = withSelect( ( select ) => {
 } );
 
 const applyWithDispatch = withDispatch( ( dispatch ) => {
-	const { toggleEditorPanelOpened } = dispatch( 'core/edit-post' );
+	const { toggleEditorPanelOpened } = dispatch( editPostStore );
 
 	return {
 		onTogglePanel: partial( toggleEditorPanelOpened, PANEL_NAME ),
 	};
 } );
 
-export default compose(
-	applyWithSelect,
-	applyWithDispatch,
-)( PageAttributes );
+export default compose( applyWithSelect, applyWithDispatch )( PageAttributes );

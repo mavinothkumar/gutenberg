@@ -6,7 +6,6 @@ import { isEmpty } from 'lodash';
 /**
  * WordPress dependencies
  */
-import { useSelect } from '@wordpress/data';
 import { PanelBody } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 
@@ -14,19 +13,16 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import GradientPicker from './control';
+import useEditorFeature from '../use-editor-feature';
 
 export default function GradientPanel( props ) {
-	const gradients = useSelect( ( select ) => (
-		select( 'core/block-editor' ).getSettings().gradients
-	), [] );
+	const gradients = useEditorFeature( 'color.gradients' );
 	if ( isEmpty( gradients ) ) {
 		return null;
 	}
 	return (
 		<PanelBody title={ __( 'Gradient' ) }>
-			<GradientPicker
-				{ ...props }
-			/>
+			<GradientPicker { ...props } />
 		</PanelBody>
 	);
 }

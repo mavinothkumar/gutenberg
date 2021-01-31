@@ -5,22 +5,19 @@ This slots allows for the insertion of items in the Status & visibility panel of
 ## Example
 
 ```js
-const { registerPlugin } = wp.plugins;
-const { PluginPostStatusInfo } = wp.editPost;
+import { registerPlugin } from '@wordpress/plugins';
+import { PluginPostStatusInfo } from '@wordpress/edit-post';
 
-
-const PluginPostStatusInfoTest = () => {
-	return(
-		<PluginPostStatusInfo>
-			<p>Post Status Info SlotFill</p>
-		</PluginPostStatusInfo>
-	)
-}
+const PluginPostStatusInfoTest = () => (
+	<PluginPostStatusInfo>
+		<p>Post Status Info SlotFill</p>
+	</PluginPostStatusInfo>
+);
 
 registerPlugin( 'post-status-info-test', { render: PluginPostStatusInfoTest } );
 ```
 
 ## Location
 
-![Location in the Status & visibility panel](https://raw.githubusercontent.com/WordPress/gutenberg/master/docs/designers-developers/assets/plugin-post-status-info-location.png?raw=true)
+![Location in the Status & visibility panel](https://raw.githubusercontent.com/WordPress/gutenberg/HEAD/docs/designers-developers/assets/plugin-post-status-info-location.png?raw=true)
 

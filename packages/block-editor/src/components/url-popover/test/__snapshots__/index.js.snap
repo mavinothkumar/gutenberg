@@ -18,7 +18,16 @@ exports[`URLPopover matches the snapshot in its default state 1`] = `
       <ForwardRef(Button)
         aria-expanded={false}
         className="block-editor-url-popover__settings-toggle"
-        icon="arrow-down-alt2"
+        icon={
+          <SVG
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <Path
+              d="M17.5 11.6L12 16l-5.5-4.4.9-1.2L12 14l4.5-3.6 1 1.2z"
+            />
+          </SVG>
+        }
         label="Link settings"
         onClick={[Function]}
       />
@@ -45,7 +54,16 @@ exports[`URLPopover matches the snapshot when the settings are toggled open 1`] 
       <ForwardRef(Button)
         aria-expanded={true}
         className="block-editor-url-popover__settings-toggle"
-        icon="arrow-down-alt2"
+        icon={
+          <SVG
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <Path
+              d="M17.5 11.6L12 16l-5.5-4.4.9-1.2L12 14l4.5-3.6 1 1.2z"
+            />
+          </SVG>
+        }
         label="Link settings"
         onClick={[Function]}
       />

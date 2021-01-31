@@ -1,33 +1,21 @@
 /**
+ * External dependencies
+ */
+import { useMemoOne } from 'use-memo-one';
+
+/**
  * WordPress dependencies
  */
 import { createQueue } from '@wordpress/priority-queue';
-import {
-	useLayoutEffect,
-	useRef,
-	useMemo,
-	useCallback,
-	useEffect,
-	useReducer,
-} from '@wordpress/element';
+import { useRef, useCallback, useReducer, useMemo } from '@wordpress/element';
 import isShallowEqual from '@wordpress/is-shallow-equal';
+import { useIsomorphicLayoutEffect } from '@wordpress/compose';
 
 /**
  * Internal dependencies
  */
 import useRegistry from '../registry-provider/use-registry';
 import useAsyncMode from '../async-mode-provider/use-async-mode';
-
-/**
- * Favor useLayoutEffect to ensure the store subscription callback always has
- * the selector from the latest render. If a store update happens between render
- * and the effect, this could cause missed/stale updates or inconsistent state.
- *
- * Fallback to useEffect for server rendered components because currently React
- * throws a warning when using useLayoutEffect in that environment.
- */
-const useIsomorphicLayoutEffect =
-	typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 const renderQueue = createQueue();
 
@@ -49,7 +37,7 @@ const renderQueue = createQueue();
  *
  * @example
  * ```js
- * const { useSelect } = wp.data;
+ * import { useSelect } from '@wordpress/data';
  *
  * function HammerPriceDisplay( { currency } ) {
  *   const price = useSelect( ( select ) => {
@@ -78,27 +66,50 @@ export default function useSelect( _mapSelect, deps ) {
 	const mapSelect = useCallback( _mapSelect, deps );
 	const registry = useRegistry();
 	const isAsync = useAsyncMode();
-	const queueContext = useMemo( () => ( { queue: true } ), [ registry ] );
+	// React can sometimes clear the `useMemo` cache.
+	// We use the cache-stable `useMemoOne` to avoid
+	// losing queues.
+	const queueContext = useMemoOne( () => ( { queue: true } ), [ registry ] );
 	const [ , forceRender ] = useReducer( ( s ) => s + 1, 0 );
 
 	const latestMapSelect = useRef();
 	const latestIsAsync = useRef( isAsync );
 	const latestMapOutput = useRef();
 	const latestMapOutputError = useRef();
-	const isMounted = useRef();
+	const isMountedAndNotUnsubscribing = useRef();
+
+	// Keep track of the stores being selected in the mapSelect function,
+	// and only subscribe to those stores later.
+	const listeningStores = useRef( [] );
+	const trapSelect = useCallback(
+		( callback ) =>
+			registry.__experimentalMarkListeningStores(
+				callback,
+				listeningStores
+			),
+		[ registry ]
+	);
+
+	// Generate a "flag" for used in the effect dependency array.
+	// It's different than just using `mapSelect` since deps could be undefined,
+	// in that case, we would still want to memoize it.
+	const depsChangedFlag = useMemo( () => ( {} ), deps || [] );
 
 	let mapOutput;
 
 	try {
-		if ( latestMapSelect.current !== mapSelect || latestMapOutputError.current ) {
-			mapOutput = mapSelect( registry.select, registry );
+		if (
+			latestMapSelect.current !== mapSelect ||
+			latestMapOutputError.current
+		) {
+			mapOutput = trapSelect( () =>
+				mapSelect( registry.select, registry )
+			);
 		} else {
 			mapOutput = latestMapOutput.current;
 		}
 	} catch ( error ) {
-		let errorMessage = `An error occurred while running 'mapSelect': ${
-			error.message
-		}`;
+		let errorMessage = `An error occurred while running 'mapSelect': ${ error.message }`;
 
 		if ( latestMapOutputError.current ) {
 			errorMessage += `\nThe error may be correlated with this previous error:\n`;
@@ -106,29 +117,39 @@ export default function useSelect( _mapSelect, deps ) {
 			errorMessage += 'Original stack trace:';
 
 			throw new Error( errorMessage );
+		} else {
+			// eslint-disable-next-line no-console
+			console.error( errorMessage );
 		}
 	}
 
 	useIsomorphicLayoutEffect( () => {
 		latestMapSelect.current = mapSelect;
+		latestMapOutput.current = mapOutput;
+		latestMapOutputError.current = undefined;
+		isMountedAndNotUnsubscribing.current = true;
+
+		// This has to run after the other ref updates
+		// to avoid using stale values in the flushed
+		// callbacks or potentially overwriting a
+		// changed `latestMapOutput.current`.
 		if ( latestIsAsync.current !== isAsync ) {
 			latestIsAsync.current = isAsync;
 			renderQueue.flush( queueContext );
 		}
-		latestMapOutput.current = mapOutput;
-		latestMapOutputError.current = undefined;
-		isMounted.current = true;
 	} );
 
 	useIsomorphicLayoutEffect( () => {
 		const onStoreChange = () => {
-			if ( isMounted.current ) {
+			if ( isMountedAndNotUnsubscribing.current ) {
 				try {
-					const newMapOutput = latestMapSelect.current(
-						registry.select,
-						registry
+					const newMapOutput = trapSelect( () =>
+						latestMapSelect.current( registry.select, registry )
 					);
-					if ( isShallowEqual( latestMapOutput.current, newMapOutput ) ) {
+
+					if (
+						isShallowEqual( latestMapOutput.current, newMapOutput )
+					) {
 						return;
 					}
 					latestMapOutput.current = newMapOutput;
@@ -147,20 +168,25 @@ export default function useSelect( _mapSelect, deps ) {
 			onStoreChange();
 		}
 
-		const unsubscribe = registry.subscribe( () => {
+		const onChange = () => {
 			if ( latestIsAsync.current ) {
 				renderQueue.add( queueContext, onStoreChange );
 			} else {
 				onStoreChange();
 			}
-		} );
+		};
+
+		const unsubscribers = listeningStores.current.map( ( storeName ) =>
+			registry.__experimentalSubscribeStore( storeName, onChange )
+		);
 
 		return () => {
-			isMounted.current = false;
-			unsubscribe();
+			isMountedAndNotUnsubscribing.current = false;
+			// The return value of the subscribe function could be undefined if the store is a custom generic store.
+			unsubscribers.forEach( ( unsubscribe ) => unsubscribe?.() );
 			renderQueue.flush( queueContext );
 		};
-	}, [ registry ] );
+	}, [ registry, trapSelect, depsChangedFlag ] );
 
 	return mapOutput;
 }

@@ -2,61 +2,175 @@
  * External dependencies
  */
 import classnames from 'classnames';
-import { escape, unescape } from 'lodash';
+import { escape, get, head, find } from 'lodash';
 
 /**
  * WordPress dependencies
  */
 import { compose } from '@wordpress/compose';
 import { createBlock } from '@wordpress/blocks';
-import { withDispatch, withSelect } from '@wordpress/data';
 import {
-	ExternalLink,
+	useSelect,
+	useDispatch,
+	withDispatch,
+	withSelect,
+} from '@wordpress/data';
+import {
 	KeyboardShortcuts,
 	PanelBody,
-	Path,
 	Popover,
-	SVG,
-	TextareaControl,
 	TextControl,
-	ToggleControl,
+	TextareaControl,
 	ToolbarButton,
 	ToolbarGroup,
 } from '@wordpress/components';
-import {
-	rawShortcut,
-	displayShortcut,
-} from '@wordpress/keycodes';
-import { __ } from '@wordpress/i18n';
+import { rawShortcut, displayShortcut } from '@wordpress/keycodes';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	BlockControls,
 	InnerBlocks,
+	__experimentalUseInnerBlocksProps as useInnerBlocksProps,
 	InspectorControls,
 	RichText,
 	__experimentalLinkControl as LinkControl,
+	useBlockProps,
 } from '@wordpress/block-editor';
-import { Fragment, useState, useEffect } from '@wordpress/element';
+import { isURL, prependHTTP } from '@wordpress/url';
+import {
+	Fragment,
+	useState,
+	useEffect,
+	useRef,
+	createInterpolateElement,
+} from '@wordpress/element';
+import { placeCaretAtHorizontalEdge } from '@wordpress/dom';
+import { link as linkIcon } from '@wordpress/icons';
+
+/**
+ * Internal dependencies
+ */
+import { ToolbarSubmenuIcon, ItemSubmenuIcon } from './icons';
+
+/**
+ * A React hook to determine if it's dragging within the target element.
+ *
+ * @typedef {import('@wordpress/element').RefObject} RefObject
+ *
+ * @param {RefObject<HTMLElement>} elementRef The target elementRef object.
+ *
+ * @return {boolean} Is dragging within the target element.
+ */
+const useIsDraggingWithin = ( elementRef ) => {
+	const [ isDraggingWithin, setIsDraggingWithin ] = useState( false );
+
+	useEffect( () => {
+		const { ownerDocument } = elementRef.current;
+
+		function handleDragStart( event ) {
+			// Check the first time when the dragging starts.
+			handleDragEnter( event );
+		}
+
+		// Set to false whenever the user cancel the drag event by either releasing the mouse or press Escape.
+		function handleDragEnd() {
+			setIsDraggingWithin( false );
+		}
+
+		function handleDragEnter( event ) {
+			// Check if the current target is inside the item element.
+			if ( elementRef.current.contains( event.target ) ) {
+				setIsDraggingWithin( true );
+			} else {
+				setIsDraggingWithin( false );
+			}
+		}
+
+		// Bind these events to the document to catch all drag events.
+		// Ideally, we can also use `event.relatedTarget`, but sadly that
+		// doesn't work in Safari.
+		ownerDocument.addEventListener( 'dragstart', handleDragStart );
+		ownerDocument.addEventListener( 'dragend', handleDragEnd );
+		ownerDocument.addEventListener( 'dragenter', handleDragEnter );
+
+		return () => {
+			ownerDocument.removeEventListener( 'dragstart', handleDragStart );
+			ownerDocument.removeEventListener( 'dragend', handleDragEnd );
+			ownerDocument.removeEventListener( 'dragenter', handleDragEnter );
+		};
+	}, [] );
+
+	return isDraggingWithin;
+};
+
+/**
+ * Given the Link block's type attribute, return the query params to give to
+ * /wp/v2/search.
+ *
+ * @param {string} type Link block's type attribute.
+ * @return {{ type?: string, subtype?: string }} Search query params.
+ */
+function getSuggestionsQuery( type ) {
+	switch ( type ) {
+		case 'post':
+		case 'page':
+			return { type: 'post', subtype: type };
+		case 'category':
+			return { type: 'term', subtype: 'category' };
+		case 'tag':
+			return { type: 'term', subtype: 'post_tag' };
+		default:
+			return {};
+	}
+}
 
 function NavigationLinkEdit( {
 	attributes,
 	hasDescendants,
 	isSelected,
+	isImmediateParentOfSelectedBlock,
 	isParentOfSelectedBlock,
 	setAttributes,
+	showSubmenuIcon,
 	insertLinkBlock,
+	textColor,
+	backgroundColor,
+	rgbTextColor,
+	rgbBackgroundColor,
+	selectedBlockHasDescendants,
+	userCanCreatePages = false,
+	userCanCreatePosts = false,
+	insertBlocksAfter,
+	mergeBlocks,
+	onReplace,
 } ) {
-	const { label, opensInNewTab, title, url, nofollow, description } = attributes;
+	const {
+		label,
+		type,
+		opensInNewTab,
+		url,
+		description,
+		rel,
+		title,
+	} = attributes;
 	const link = {
-		title: title ? unescape( title ) : '',
 		url,
 		opensInNewTab,
 	};
+	const { saveEntityRecord } = useDispatch( 'core' );
 	const [ isLinkOpen, setIsLinkOpen ] = useState( false );
+	const listItemRef = useRef( null );
+	const isDraggingWithin = useIsDraggingWithin( listItemRef );
 	const itemLabelPlaceholder = __( 'Add link…' );
+	const ref = useRef();
+
+	const isDraggingBlocks = useSelect(
+		( select ) => select( 'core/block-editor' ).isDraggingBlocks(),
+		[]
+	);
 
 	// Show the LinkControl on mount if the URL is empty
 	// ( When adding a new menu item)
-	// This can't be done in the useState call because it cconflicts
+	// This can't be done in the useState call because it conflicts
 	// with the autofocus behavior of the BlockListBlock component.
 	useEffect( () => {
 		if ( ! url ) {
@@ -74,6 +188,107 @@ function NavigationLinkEdit( {
 		}
 	}, [ isSelected ] );
 
+	// If the LinkControl popover is open and the URL has changed, close the LinkControl and focus the label text.
+	useEffect( () => {
+		if ( isLinkOpen && url ) {
+			// Does this look like a URL and have something TLD-ish?
+			if (
+				isURL( prependHTTP( label ) ) &&
+				/^.+\.[a-z]+/.test( label )
+			) {
+				// Focus and select the label text.
+				selectLabelText();
+			} else {
+				// Focus it (but do not select).
+				placeCaretAtHorizontalEdge( ref.current, true );
+			}
+		}
+	}, [ url ] );
+
+	/**
+	 * Focus the Link label text and select it.
+	 */
+	function selectLabelText() {
+		ref.current.focus();
+		const { ownerDocument } = ref.current;
+		const { defaultView } = ownerDocument;
+		const selection = defaultView.getSelection();
+		const range = ownerDocument.createRange();
+		// Get the range of the current ref contents so we can add this range to the selection.
+		range.selectNodeContents( ref.current );
+		selection.removeAllRanges();
+		selection.addRange( range );
+	}
+
+	let userCanCreate = false;
+	if ( ! type || type === 'page' ) {
+		userCanCreate = userCanCreatePages;
+	} else if ( type === 'post' ) {
+		userCanCreate = userCanCreatePosts;
+	}
+
+	async function handleCreate( pageTitle ) {
+		const postType = type || 'page';
+
+		const page = await saveEntityRecord( 'postType', postType, {
+			title: pageTitle,
+			status: 'draft',
+		} );
+
+		return {
+			id: page.id,
+			postType,
+			title: page.title.rendered,
+			url: page.link,
+		};
+	}
+
+	const blockProps = useBlockProps( {
+		ref: listItemRef,
+		className: classnames( {
+			'is-editing':
+				( isSelected || isParentOfSelectedBlock ) &&
+				// Don't show the element as editing while dragging.
+				! isDraggingBlocks,
+			// Don't select the element while dragging.
+			'is-selected': isSelected && ! isDraggingBlocks,
+			'is-dragging-within': isDraggingWithin,
+			'has-link': !! url,
+			'has-child': hasDescendants,
+			'has-text-color': rgbTextColor,
+			[ `has-${ textColor }-color` ]: !! textColor,
+			'has-background': rgbBackgroundColor,
+			[ `has-${ backgroundColor }-background-color` ]: !! backgroundColor,
+		} ),
+		style: {
+			color: rgbTextColor,
+			backgroundColor: rgbBackgroundColor,
+		},
+	} );
+
+	const innerBlocksProps = useInnerBlocksProps(
+		{
+			className: classnames( 'wp-block-navigation__container', {
+				'is-parent-of-selected-block':
+					isParentOfSelectedBlock &&
+					// Don't select as parent of selected block while dragging.
+					! isDraggingBlocks,
+			} ),
+		},
+		{
+			allowedBlocks: [ 'core/navigation-link' ],
+			renderAppender:
+				( isSelected && hasDescendants ) ||
+				( isImmediateParentOfSelectedBlock &&
+					! selectedBlockHasDescendants ) ||
+				// Show the appender while dragging to allow inserting element between item and the appender.
+				( isDraggingBlocks && hasDescendants )
+					? InnerBlocks.DefaultAppender
+					: false,
+			__experimentalAppenderTagName: 'li',
+		}
+	);
+
 	return (
 		<Fragment>
 			<BlockControls>
@@ -81,81 +296,75 @@ function NavigationLinkEdit( {
 					<KeyboardShortcuts
 						bindGlobal
 						shortcuts={ {
-							[ rawShortcut.primary( 'k' ) ]: () => setIsLinkOpen( true ),
+							[ rawShortcut.primary( 'k' ) ]: () =>
+								setIsLinkOpen( true ),
 						} }
 					/>
 					<ToolbarButton
 						name="link"
-						icon="admin-links"
+						icon={ linkIcon }
 						title={ __( 'Link' ) }
 						shortcut={ displayShortcut.primary( 'k' ) }
 						onClick={ () => setIsLinkOpen( true ) }
 					/>
 					<ToolbarButton
 						name="submenu"
-						icon={ <SVG xmlns="http://www.w3.org/2000/svg" width="24" height="24"><Path d="M14 5h8v2h-8zm0 5.5h8v2h-8zm0 5.5h8v2h-8zM2 11.5C2 15.08 4.92 18 8.5 18H9v2l3-3-3-3v2h-.5C6.02 16 4 13.98 4 11.5S6.02 7 8.5 7H12V5H8.5C4.92 5 2 7.92 2 11.5z" /><Path fill="none" d="M0 0h24v24H0z" /></SVG> }
+						icon={ <ToolbarSubmenuIcon /> }
 						title={ __( 'Add submenu' ) }
 						onClick={ insertLinkBlock }
 					/>
 				</ToolbarGroup>
 			</BlockControls>
 			<InspectorControls>
-				<PanelBody
-					title={ __( 'Link Settings' ) }
-				>
+				<PanelBody title={ __( 'Link settings' ) }>
 					<TextareaControl
 						value={ description || '' }
 						onChange={ ( descriptionValue ) => {
 							setAttributes( { description: descriptionValue } );
 						} }
 						label={ __( 'Description' ) }
-						help={ __( 'The description will be displayed in the menu if the current theme supports it.' ) }
+						help={ __(
+							'The description will be displayed in the menu if the current theme supports it.'
+						) }
 					/>
-				</PanelBody>
-				<PanelBody
-					title={ __( 'SEO Settings' ) }
-				>
 					<TextControl
 						value={ title || '' }
 						onChange={ ( titleValue ) => {
 							setAttributes( { title: titleValue } );
 						} }
-						label={ __( 'Title Attribute' ) }
-						help={ __( 'Provide more context about where the link goes.' ) }
+						label={ __( 'Link title' ) }
+						autoComplete="off"
 					/>
-					<ToggleControl
-						checked={ nofollow }
-						onChange={ ( nofollowValue ) => {
-							setAttributes( { nofollow: nofollowValue } );
+					<TextControl
+						value={ rel || '' }
+						onChange={ ( relValue ) => {
+							setAttributes( { rel: relValue } );
 						} }
-						label={ __( 'Add nofollow to link' ) }
-						help={ (
-							<Fragment>
-								{ __( 'Don\'t let search engines follow this link.' ) }
-								<ExternalLink
-									className="wp-block-navigation-link__nofollow-external-link"
-									href={ __( 'https://codex.wordpress.org/Nofollow' ) }
-								>
-									{ __( 'What\'s this?' ) }
-								</ExternalLink>
-							</Fragment>
-						) }
+						label={ __( 'Link rel' ) }
+						autoComplete="off"
 					/>
 				</PanelBody>
 			</InspectorControls>
-			<div className={ classnames(
-				'wp-block-navigation-link', {
-					'is-editing': isSelected || isParentOfSelectedBlock,
-					'is-selected': isSelected,
-					'has-link': !! url,
-				} ) }
-			>
-				<div>
+			<li { ...blockProps }>
+				<div className="wp-block-navigation-link__content">
 					<RichText
-						className="wp-block-navigation-link__content"
+						ref={ ref }
+						identifier="label"
+						className="wp-block-navigation-link__label"
 						value={ label }
-						onChange={ ( labelValue ) => setAttributes( { label: labelValue } ) }
+						onChange={ ( labelValue ) =>
+							setAttributes( { label: labelValue } )
+						}
+						onMerge={ mergeBlocks }
+						onReplace={ onReplace }
+						__unstableOnSplitAtEnd={ () =>
+							insertBlocksAfter(
+								createBlock( 'core/navigation-link' )
+							)
+						}
+						aria-label={ __( 'Navigation link text' ) }
 						placeholder={ itemLabelPlaceholder }
+						keepPlaceholderOnFocus
 						withoutInteractiveFormatting
 						allowedFormats={ [
 							'core/bold',
@@ -165,44 +374,157 @@ function NavigationLinkEdit( {
 						] }
 					/>
 					{ isLinkOpen && (
-						<Popover position="bottom center">
+						<Popover
+							position="bottom center"
+							onClose={ () => setIsLinkOpen( false ) }
+						>
 							<LinkControl
 								className="wp-block-navigation-link__inline-link-input"
 								value={ link }
 								showInitialSuggestions={ true }
+								withCreateSuggestion={ userCanCreate }
+								createSuggestion={ handleCreate }
+								createSuggestionButtonText={ ( searchTerm ) => {
+									let format;
+									if ( type === 'post' ) {
+										/* translators: %s: search term. */
+										format = __(
+											'Create draft post: <mark>%s</mark>'
+										);
+									} else {
+										/* translators: %s: search term. */
+										format = __(
+											'Create draft page: <mark>%s</mark>'
+										);
+									}
+									return createInterpolateElement(
+										sprintf( format, searchTerm ),
+										{ mark: <mark /> }
+									);
+								} }
+								noDirectEntry={ !! type }
+								noURLSuggestion={ !! type }
+								suggestionsQuery={ getSuggestionsQuery( type ) }
 								onChange={ ( {
 									title: newTitle = '',
 									url: newURL = '',
 									opensInNewTab: newOpensInNewTab,
-								} = {} ) => setAttributes( {
-									title: escape( newTitle ),
-									url: encodeURI( newURL ),
-									label: label || escape( newTitle ),
-									opensInNewTab: newOpensInNewTab,
-								} ) }
-								onClose={ () => setIsLinkOpen( false ) }
+									id,
+								} = {} ) =>
+									setAttributes( {
+										url: encodeURI( newURL ),
+										label: ( () => {
+											const normalizedTitle = newTitle.replace(
+												/http(s?):\/\//gi,
+												''
+											);
+											const normalizedURL = newURL.replace(
+												/http(s?):\/\//gi,
+												''
+											);
+											if (
+												newTitle !== '' &&
+												normalizedTitle !==
+													normalizedURL &&
+												label !== newTitle
+											) {
+												return escape( newTitle );
+											} else if ( label ) {
+												return label;
+											}
+											// If there's no label, add the URL.
+											return escape( normalizedURL );
+										} )(),
+										opensInNewTab: newOpensInNewTab,
+										id,
+									} )
+								}
 							/>
 						</Popover>
 					) }
 				</div>
-				<InnerBlocks
-					allowedBlocks={ [ 'core/navigation-link' ] }
-					renderAppender={ hasDescendants ? InnerBlocks.ButtonBlockAppender : false }
-				/>
-			</div>
+				{ showSubmenuIcon && (
+					<span className="wp-block-navigation-link__submenu-icon">
+						<ItemSubmenuIcon />
+					</span>
+				) }
+				<ul { ...innerBlocksProps } />
+			</li>
 		</Fragment>
 	);
 }
 
+/**
+ * Returns the color object matching the slug, or undefined.
+ *
+ * @param {Array}  colors      The editor settings colors array.
+ * @param {string} colorSlug   A string containing the color slug.
+ * @param {string} customColor A string containing the custom color value.
+ *
+ * @return {Object} Color object included in the editor settings colors, or Undefined.
+ */
+const getColorObjectByColorSlug = ( colors, colorSlug, customColor ) => {
+	if ( customColor ) {
+		return customColor;
+	}
+
+	if ( ! colors || ! colors.length ) {
+		return;
+	}
+
+	return get( find( colors, { slug: colorSlug } ), 'color' );
+};
+
 export default compose( [
 	withSelect( ( select, ownProps ) => {
-		const { getClientIdsOfDescendants, hasSelectedInnerBlock } = select( 'core/block-editor' );
+		const {
+			getBlockAttributes,
+			getClientIdsOfDescendants,
+			hasSelectedInnerBlock,
+			getBlockParentsByBlockName,
+			getSelectedBlockClientId,
+			getSettings,
+		} = select( 'core/block-editor' );
 		const { clientId } = ownProps;
+		const rootBlock = head(
+			getBlockParentsByBlockName( clientId, 'core/navigation' )
+		);
+		const navigationBlockAttributes = getBlockAttributes( rootBlock );
+		const colors = get( getSettings(), 'colors', [] );
+		const hasDescendants = !! getClientIdsOfDescendants( [ clientId ] )
+			.length;
+		const showSubmenuIcon =
+			!! navigationBlockAttributes.showSubmenuIcon && hasDescendants;
+		const isParentOfSelectedBlock = hasSelectedInnerBlock( clientId, true );
+		const isImmediateParentOfSelectedBlock = hasSelectedInnerBlock(
+			clientId,
+			false
+		);
+		const selectedBlockId = getSelectedBlockClientId();
+		const selectedBlockHasDescendants = !! getClientIdsOfDescendants( [
+			selectedBlockId,
+		] )?.length;
 
 		return {
-			isParentOfSelectedBlock: hasSelectedInnerBlock( clientId, true ),
-			hasDescendants: !! getClientIdsOfDescendants( [ clientId ] ).length,
-
+			isParentOfSelectedBlock,
+			isImmediateParentOfSelectedBlock,
+			hasDescendants,
+			selectedBlockHasDescendants,
+			showSubmenuIcon,
+			textColor: navigationBlockAttributes.textColor,
+			backgroundColor: navigationBlockAttributes.backgroundColor,
+			userCanCreatePages: select( 'core' ).canUser( 'create', 'pages' ),
+			userCanCreatePosts: select( 'core' ).canUser( 'create', 'posts' ),
+			rgbTextColor: getColorObjectByColorSlug(
+				colors,
+				navigationBlockAttributes.textColor,
+				navigationBlockAttributes.customTextColor
+			),
+			rgbBackgroundColor: getColorObjectByColorSlug(
+				colors,
+				navigationBlockAttributes.backgroundColor,
+				navigationBlockAttributes.customBackgroundColor
+			),
 		};
 	} ),
 	withDispatch( ( dispatch, ownProps, registry ) => {
@@ -210,21 +532,17 @@ export default compose( [
 			insertLinkBlock() {
 				const { clientId } = ownProps;
 
-				const {
-					insertBlock,
-				} = dispatch( 'core/block-editor' );
+				const { insertBlock } = dispatch( 'core/block-editor' );
 
-				const { getClientIdsOfDescendants } = registry.select( 'core/block-editor' );
+				const { getClientIdsOfDescendants } = registry.select(
+					'core/block-editor'
+				);
 				const navItems = getClientIdsOfDescendants( [ clientId ] );
 				const insertionPoint = navItems.length ? navItems.length : 0;
 
 				const blockToInsert = createBlock( 'core/navigation-link' );
 
-				insertBlock(
-					blockToInsert,
-					insertionPoint,
-					clientId,
-				);
+				insertBlock( blockToInsert, insertionPoint, clientId );
 			},
 		};
 	} ),

@@ -1,8 +1,16 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
-import { Path, SVG } from '@wordpress/components';
+import { __, _x } from '@wordpress/i18n';
+import {
+	category as categoryIcon,
+	mapMarker as linkIcon,
+	page as pageIcon,
+	postTitle as postIcon,
+	tag as tagIcon,
+} from '@wordpress/icons';
+import { InnerBlocks } from '@wordpress/block-editor';
+
 /**
  * Internal dependencies
  */
@@ -11,25 +19,108 @@ import edit from './edit';
 import save from './save';
 
 const { name } = metadata;
+
 export { metadata, name };
 
 export const settings = {
-	title: __( 'Navigation Link' ),
+	title: _x( 'Link', 'block title' ),
 
-	parent: [ 'core/navigation' ],
-
-	icon: <SVG xmlns="http://www.w3.org/2000/svg" width="24" height="24"><Path d="M12 7.27l4.28 10.43-3.47-1.53-.81-.36-.81.36-3.47 1.53L12 7.27M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2z" /></SVG>,
+	icon: linkIcon,
 
 	description: __( 'Add a page, link, or another item to your navigation.' ),
 
-	supports: {
-		reusable: false,
-		html: false,
-	},
+	variations: [
+		{
+			name: 'link',
+			isDefault: true,
+			title: __( 'Link' ),
+			description: __( 'A link to a URL.' ),
+			attributes: {},
+		},
+		{
+			name: 'post',
+			icon: postIcon,
+			title: __( 'Post Link' ),
+			description: __( 'A link to a post.' ),
+			attributes: { type: 'post' },
+		},
+		{
+			name: 'page',
+			icon: pageIcon,
+			title: __( 'Page Link' ),
+			description: __( 'A link to a page.' ),
+			attributes: { type: 'page' },
+		},
+		{
+			name: 'category',
+			icon: categoryIcon,
+			title: __( 'Category Link' ),
+			description: __( 'A link to a category.' ),
+			attributes: { type: 'category' },
+		},
+		{
+			name: 'tag',
+			icon: tagIcon,
+			title: __( 'Tag Link' ),
+			description: __( 'A link to a tag.' ),
+			attributes: { type: 'tag' },
+		},
+	],
 
 	__experimentalLabel: ( { label } ) => label,
 
-	edit,
-	save,
-};
+	merge( leftAttributes, { label: rightLabel = '' } ) {
+		return {
+			...leftAttributes,
+			label: leftAttributes.label + rightLabel,
+		};
+	},
 
+	edit,
+
+	save,
+
+	deprecated: [
+		{
+			isEligible( attributes ) {
+				return attributes.nofollow;
+			},
+
+			attributes: {
+				label: {
+					type: 'string',
+				},
+				type: {
+					type: 'string',
+				},
+				nofollow: {
+					type: 'boolean',
+				},
+				description: {
+					type: 'string',
+				},
+				id: {
+					type: 'number',
+				},
+				opensInNewTab: {
+					type: 'boolean',
+					default: false,
+				},
+				url: {
+					type: 'string',
+				},
+			},
+
+			migrate( { nofollow, ...rest } ) {
+				return {
+					rel: nofollow ? 'nofollow' : '',
+					...rest,
+				};
+			},
+
+			save() {
+				return <InnerBlocks.Content />;
+			},
+		},
+	],
+};

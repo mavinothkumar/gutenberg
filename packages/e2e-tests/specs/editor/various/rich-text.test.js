@@ -7,6 +7,7 @@ import {
 	insertBlock,
 	clickBlockAppender,
 	pressKeyWithModifier,
+	showBlockToolbar,
 } from '@wordpress/e2e-test-utils';
 
 describe( 'RichText', () => {
@@ -22,6 +23,8 @@ describe( 'RichText', () => {
 		//
 		// See: https://github.com/WordPress/gutenberg/issues/3091
 		await insertBlock( 'Heading' );
+		await page.waitForSelector( '[aria-label="Change heading level"]' );
+		await page.click( '[aria-label="Change heading level"]' );
 		await page.click( '[aria-label="Heading 3"]' );
 
 		expect( await getEditedPostContent() ).toMatchSnapshot();
@@ -70,9 +73,11 @@ describe( 'RichText', () => {
 		await pressKeyWithModifier( 'shift', 'ArrowLeft' );
 		await pressKeyWithModifier( 'primary', 'b' );
 
-		const count = await page.evaluate( () => document.querySelectorAll(
-			'*[data-rich-text-format-boundary]'
-		).length );
+		const count = await page.evaluate(
+			() =>
+				document.querySelectorAll( '*[data-rich-text-format-boundary]' )
+					.length
+		);
 
 		expect( count ).toBe( 1 );
 	} );
@@ -80,12 +85,10 @@ describe( 'RichText', () => {
 	it( 'should return focus when pressing formatting button', async () => {
 		await clickBlockAppender();
 		await page.keyboard.type( 'Some ' );
-		await page.mouse.move( 0, 0 );
-		await page.mouse.move( 10, 10 );
+		await showBlockToolbar();
 		await page.click( '[aria-label="Bold"]' );
 		await page.keyboard.type( 'bold' );
-		await page.mouse.move( 0, 0 );
-		await page.mouse.move( 10, 10 );
+		await showBlockToolbar();
 		await page.click( '[aria-label="Bold"]' );
 		await page.keyboard.type( '.' );
 
@@ -182,21 +185,32 @@ describe( 'RichText', () => {
 
 			window.unsubscribes = [ () => mutationObserver.disconnect() ];
 
-			document.addEventListener( 'selectionchange', () => {
-				function throwMultipleSelectionChange() {
-					throw new Error( 'Typing should only emit one selection change event.' );
-				}
+			document.addEventListener(
+				'selectionchange',
+				() => {
+					function throwMultipleSelectionChange() {
+						throw new Error(
+							'Typing should only emit one selection change event.'
+						);
+					}
 
-				document.addEventListener(
-					'selectionchange',
-					throwMultipleSelectionChange,
-					{ once: true }
-				);
+					document.addEventListener(
+						'selectionchange',
+						throwMultipleSelectionChange,
+						{
+							once: true,
+						}
+					);
 
-				window.unsubscribes.push( () => {
-					document.removeEventListener( 'selectionchange', throwMultipleSelectionChange );
-				} );
-			}, { once: true } );
+					window.unsubscribes.push( () => {
+						document.removeEventListener(
+							'selectionchange',
+							throwMultipleSelectionChange
+						);
+					} );
+				},
+				{ once: true }
+			);
 		} );
 
 		await page.keyboard.type( '4' );
@@ -206,7 +220,9 @@ describe( 'RichText', () => {
 			// one item in `window.unsubscribes`, it means that only one
 			// function is present to disconnect the `mutationObserver`.
 			if ( window.unsubscribes.length === 1 ) {
-				throw new Error( 'The selection change event listener was never called.' );
+				throw new Error(
+					'The selection change event listener was never called.'
+				);
 			}
 
 			window.unsubscribes.forEach( ( unsubscribe ) => unsubscribe() );
@@ -238,6 +254,9 @@ describe( 'RichText', () => {
 
 	it( 'should handle Home and End keys', async () => {
 		await page.keyboard.press( 'Enter' );
+
+		// Wait for rich text editor to load.
+		await page.waitForSelector( '.block-editor-rich-text__editable' );
 
 		await pressKeyWithModifier( 'primary', 'b' );
 		await page.keyboard.type( '12' );
@@ -275,7 +294,9 @@ describe( 'RichText', () => {
 		} );
 		// Wait for the next animation frame, see the focus event listener in
 		// RichText.
-		await page.evaluate( () => new Promise( window.requestAnimationFrame ) );
+		await page.evaluate(
+			() => new Promise( window.requestAnimationFrame )
+		);
 		await pressKeyWithModifier( 'primary', 'b' );
 		await page.keyboard.type( '2' );
 		await pressKeyWithModifier( 'primary', 'b' );

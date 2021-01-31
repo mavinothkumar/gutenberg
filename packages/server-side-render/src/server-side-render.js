@@ -6,17 +6,11 @@ import { isEqual, debounce } from 'lodash';
 /**
  * WordPress dependencies
  */
-import {
-	Component,
-	RawHTML,
-} from '@wordpress/element';
+import { Component, RawHTML } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
-import {
-	Placeholder,
-	Spinner,
-} from '@wordpress/components';
+import { Placeholder, Spinner } from '@wordpress/components';
 
 export function rendererPath( block, attributes = null, urlQueryArgs = {} ) {
 	return addQueryArgs( `/wp/v2/block-renderer/${ block }`, {
@@ -59,51 +53,86 @@ export class ServerSideRender extends Component {
 		if ( null !== this.state.response ) {
 			this.setState( { response: null } );
 		}
-		const { block, attributes = null, urlQueryArgs = {} } = props;
+		const {
+			block,
+			attributes = null,
+			httpMethod = 'GET',
+			urlQueryArgs = {},
+		} = props;
 
-		const path = rendererPath( block, attributes, urlQueryArgs );
+		// If httpMethod is 'POST', send the attributes in the request body instead of the URL.
+		// This allows sending a larger attributes object than in a GET request, where the attributes are in the URL.
+		const isPostRequest = 'POST' === httpMethod;
+		const urlAttributes = isPostRequest ? null : attributes;
+		const path = rendererPath( block, urlAttributes, urlQueryArgs );
+		const data = isPostRequest ? { attributes } : null;
+
 		// Store the latest fetch request so that when we process it, we can
 		// check if it is the current request, to avoid race conditions on slow networks.
-		const fetchRequest = this.currentFetchRequest = apiFetch( { path } )
+		const fetchRequest = ( this.currentFetchRequest = apiFetch( {
+			path,
+			data,
+			method: isPostRequest ? 'POST' : 'GET',
+		} )
 			.then( ( response ) => {
-				if ( this.isStillMounted && fetchRequest === this.currentFetchRequest && response ) {
+				if (
+					this.isStillMounted &&
+					fetchRequest === this.currentFetchRequest &&
+					response
+				) {
 					this.setState( { response: response.rendered } );
 				}
 			} )
 			.catch( ( error ) => {
-				if ( this.isStillMounted && fetchRequest === this.currentFetchRequest ) {
-					this.setState( { response: {
-						error: true,
-						errorMsg: error.message,
-					} } );
+				if (
+					this.isStillMounted &&
+					fetchRequest === this.currentFetchRequest
+				) {
+					this.setState( {
+						response: {
+							error: true,
+							errorMsg: error.message,
+						},
+					} );
 				}
-			} );
+			} ) );
 		return fetchRequest;
 	}
 
 	render() {
 		const response = this.state.response;
-		const { className, EmptyResponsePlaceholder, ErrorResponsePlaceholder, LoadingResponsePlaceholder } = this.props;
+		const {
+			className,
+			EmptyResponsePlaceholder,
+			ErrorResponsePlaceholder,
+			LoadingResponsePlaceholder,
+		} = this.props;
 
 		if ( response === '' ) {
 			return (
-				<EmptyResponsePlaceholder response={ response } { ...this.props } />
+				<EmptyResponsePlaceholder
+					response={ response }
+					{ ...this.props }
+				/>
 			);
 		} else if ( ! response ) {
 			return (
-				<LoadingResponsePlaceholder response={ response } { ...this.props } />
+				<LoadingResponsePlaceholder
+					response={ response }
+					{ ...this.props }
+				/>
 			);
 		} else if ( response.error ) {
 			return (
-				<ErrorResponsePlaceholder response={ response } { ...this.props } />
+				<ErrorResponsePlaceholder
+					response={ response }
+					{ ...this.props }
+				/>
 			);
 		}
 
 		return (
-			<RawHTML
-				key="html"
-				className={ className }
-			>
+			<RawHTML key="html" className={ className }>
 				{ response }
 			</RawHTML>
 		);
@@ -112,28 +141,23 @@ export class ServerSideRender extends Component {
 
 ServerSideRender.defaultProps = {
 	EmptyResponsePlaceholder: ( { className } ) => (
-		<Placeholder
-			className={ className }
-		>
+		<Placeholder className={ className }>
 			{ __( 'Block rendered as empty.' ) }
 		</Placeholder>
 	),
 	ErrorResponsePlaceholder: ( { response, className } ) => {
-		// translators: %s: error message describing the problem
-		const errorMessage = sprintf( __( 'Error loading block: %s' ), response.errorMsg );
+		const errorMessage = sprintf(
+			// translators: %s: error message describing the problem
+			__( 'Error loading block: %s' ),
+			response.errorMsg
+		);
 		return (
-			<Placeholder
-				className={ className }
-			>
-				{ errorMessage }
-			</Placeholder>
+			<Placeholder className={ className }>{ errorMessage }</Placeholder>
 		);
 	},
 	LoadingResponsePlaceholder: ( { className } ) => {
 		return (
-			<Placeholder
-				className={ className }
-			>
+			<Placeholder className={ className }>
 				<Spinner />
 			</Placeholder>
 		);

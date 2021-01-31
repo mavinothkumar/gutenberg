@@ -2,29 +2,39 @@
  * WordPress dependencies
  */
 import { Fragment } from '@wordpress/element';
-import { compose } from '@wordpress/compose';
+import { compose, useDebounce } from '@wordpress/compose';
 import { withSelect } from '@wordpress/data';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { Spinner, withSpokenMessages } from '@wordpress/components';
+import { Spinner } from '@wordpress/components';
+import { speak } from '@wordpress/a11y';
+import { store as blockEditorStore } from '@wordpress/block-editor';
 
 /**
  * Internal dependencies
  */
 import DownloadableBlocksList from '../downloadable-blocks-list';
+import { store as blockDirectoryStore } from '../../store';
 
-function DownloadableBlocksPanel( { downloadableItems, onSelect, onHover, hasPermission, isLoading, isWaiting, debouncedSpeak } ) {
-	if ( ! hasPermission ) {
-		debouncedSpeak( __( 'No blocks found in your library. Please contact your site administrator to install new blocks.' ) );
+function DownloadableBlocksPanel( {
+	downloadableItems,
+	onSelect,
+	onHover,
+	hasPermission,
+	isLoading,
+	isWaiting,
+} ) {
+	const debouncedSpeak = useDebounce( speak, 500 );
+
+	if ( false === hasPermission ) {
+		debouncedSpeak( __( 'No blocks found in your library.' ) );
 		return (
 			<p className="block-directory-downloadable-blocks-panel__description has-no-results">
 				{ __( 'No blocks found in your library.' ) }
-				<br />
-				{ __( 'Please contact your site administrator to install new blocks.' ) }
 			</p>
 		);
 	}
 
-	if ( isLoading || isWaiting ) {
+	if ( typeof hasPermission === 'undefined' || isLoading || isWaiting ) {
 		return (
 			<p className="block-directory-downloadable-blocks-panel__description has-no-results">
 				<Spinner />
@@ -41,7 +51,12 @@ function DownloadableBlocksPanel( { downloadableItems, onSelect, onHover, hasPer
 	}
 
 	const resultsFoundMessage = sprintf(
-		_n( 'No blocks found in your library. We did find %d block available for download.', 'No blocks found in your library. We did find %d blocks available for download.', downloadableItems.length ),
+		/* translators: %s: number of available blocks. */
+		_n(
+			'No blocks found in your library. We did find %d block available for download.',
+			'No blocks found in your library. We did find %d blocks available for download.',
+			downloadableItems.length
+		),
 		downloadableItems.length
 	);
 
@@ -49,25 +64,42 @@ function DownloadableBlocksPanel( { downloadableItems, onSelect, onHover, hasPer
 	return (
 		<Fragment>
 			<p className="block-directory-downloadable-blocks-panel__description">
-				{ __( 'No blocks found in your library. These blocks can be downloaded and installed:' ) }
+				{ __(
+					'No blocks found in your library. These blocks can be downloaded and installed:'
+				) }
 			</p>
-			<DownloadableBlocksList items={ downloadableItems } onSelect={ onSelect } onHover={ onHover } />
+			<DownloadableBlocksList
+				items={ downloadableItems }
+				onSelect={ onSelect }
+				onHover={ onHover }
+			/>
 		</Fragment>
 	);
 }
 
 export default compose( [
-	withSpokenMessages,
-	withSelect( ( select, { filterValue } ) => {
+	withSelect( ( select, { filterValue, rootClientId = null } ) => {
 		const {
 			getDownloadableBlocks,
-			hasInstallBlocksPermission,
 			isRequestingDownloadableBlocks,
-		} = select( 'core/block-directory' );
+		} = select( blockDirectoryStore );
+		const { canInsertBlockType } = select( blockEditorStore );
 
-		const hasPermission = hasInstallBlocksPermission();
-		const downloadableItems = hasPermission ? getDownloadableBlocks( filterValue ) : [];
-		const isLoading = isRequestingDownloadableBlocks();
+		const hasPermission = select( 'core' ).canUser(
+			'read',
+			'block-directory/search'
+		);
+
+		function getInstallableBlocks( term ) {
+			return getDownloadableBlocks( term ).filter( ( block ) =>
+				canInsertBlockType( block, rootClientId, true )
+			);
+		}
+
+		const downloadableItems = hasPermission
+			? getInstallableBlocks( filterValue )
+			: [];
+		const isLoading = isRequestingDownloadableBlocks( filterValue );
 
 		return {
 			downloadableItems,

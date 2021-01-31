@@ -1,29 +1,30 @@
-
 /**
  * External dependencies
  */
 import classnames from 'classnames';
-import { isEmpty, pick } from 'lodash';
+import { isEmpty } from 'lodash';
 
 /**
  * WordPress dependencies
  */
 import { BaseControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { useSelect } from '@wordpress/data';
 
 /**
  * Internal dependencies
  */
 import GradientPicker from './';
+import useEditorFeature from '../use-editor-feature';
 
-export default function( { className, value, onChange, label = __( 'Gradient Presets' ), ...props } ) {
-	const { gradients = [], disableCustomGradients } = useSelect( ( select ) => (
-		pick(
-			select( 'core/block-editor' ).getSettings(),
-			[ 'gradients', 'disableCustomGradients' ]
-		)
-	), [] );
+export default function GradientPickerControl( {
+	className,
+	value,
+	onChange,
+	label = __( 'Gradient Presets' ),
+	...props
+} ) {
+	const gradients = useEditorFeature( 'color.gradients' );
+	const disableCustomGradients = ! useEditorFeature( 'color.customGradient' );
 	if ( isEmpty( gradients ) && disableCustomGradients ) {
 		return null;
 	}
@@ -34,9 +35,7 @@ export default function( { className, value, onChange, label = __( 'Gradient Pre
 				className
 			) }
 		>
-			<BaseControl.VisualLabel>
-				{ label }
-			</BaseControl.VisualLabel>
+			<BaseControl.VisualLabel>{ label }</BaseControl.VisualLabel>
 			<GradientPicker
 				value={ value }
 				onChange={ onChange }

@@ -73,7 +73,7 @@ function random_image_enqueue_block_editor_assets() {
 	wp_enqueue_script(
 		'random-image-block',
 		plugins_url( 'block.js', __FILE__ ),
-		array( 'wp-blocks', 'wp-element' )
+		array( 'wp-blocks', 'wp-element', 'wp-block-editor', )
 	);
 }
 add_action( 'enqueue_block_editor_assets', 'random_image_enqueue_block_editor_assets' );
@@ -81,9 +81,10 @@ add_action( 'enqueue_block_editor_assets', 'random_image_enqueue_block_editor_as
 
 ```js
 // block.js
-( function( blocks, element ) {
+( function( blocks, element, blockEditor ) {
 	var el = element.createElement,
-		source = blocks.source;
+		source = blocks.source,
+		useBlockProps = blockEditor.useBlockProps;
 
 	function RandomImage( props ) {
 		var src = 'http://lorempixel.com/400/200/' + props.category;
@@ -95,11 +96,13 @@ add_action( 'enqueue_block_editor_assets', 'random_image_enqueue_block_editor_as
 	}
 
 	blocks.registerBlockType( 'myplugin/random-image', {
+		apiVersion: 2,
+
 		title: 'Random Image',
 
 		icon: 'format-image',
 
-		category: 'common',
+		category: 'text',
 
 		attributes: {
 			category: {
@@ -111,6 +114,7 @@ add_action( 'enqueue_block_editor_assets', 'random_image_enqueue_block_editor_as
 		},
 
 		edit: function( props ) {
+			var blockProps = useBlockProps();
 			var category = props.attributes.category,
 				children;
 
@@ -134,7 +138,7 @@ add_action( 'enqueue_block_editor_assets', 'random_image_enqueue_block_editor_as
 				)
 			);
 
-			return el( 'form', { onSubmit: setCategory }, children );
+			return el( 'form', Object.assing( blockProps, {  onSubmit: setCategory } ), children );
 		},
 
 		save: function( props ) {
@@ -143,7 +147,8 @@ add_action( 'enqueue_block_editor_assets', 'random_image_enqueue_block_editor_as
 	} );
 } )(
 	window.wp.blocks,
-	window.wp.element
+	window.wp.element,
+	window.wp.blockEditor
 );
 ```
 
@@ -204,6 +209,21 @@ _Parameters_
 _Returns_
 
 -   `Object`: Block object.
+
+<a name="createBlocksFromInnerBlocksTemplate" href="#createBlocksFromInnerBlocksTemplate">#</a> **createBlocksFromInnerBlocksTemplate**
+
+Given an array of InnerBlocks templates or Block Objects,
+returns an array of created Blocks from them.
+It handles the case of having InnerBlocks as Blocks by
+converting them to the proper format to continue recursively.
+
+_Parameters_
+
+-   _innerBlocksOrTemplate_ `Array`: Nested blocks or InnerBlocks templates.
+
+_Returns_
+
+-   `Array<Object>`: Array of Block objects.
 
 <a name="doBlocksMatchTemplate" href="#doBlocksMatchTemplate">#</a> **doBlocksMatchTemplate**
 
@@ -348,13 +368,26 @@ _Returns_
 
 -   `Array`: Block settings.
 
+<a name="getBlockVariations" href="#getBlockVariations">#</a> **getBlockVariations**
+
+Returns an array with the variations of a given block type.
+
+_Parameters_
+
+-   _blockName_ `string`: Name of block (example: “core/columns”).
+-   _scope_ `[WPBlockVariationScope]`: Block variation scope name.
+
+_Returns_
+
+-   `(Array<WPBlockVariation>|void)`: Block variations.
+
 <a name="getCategories" href="#getCategories">#</a> **getCategories**
 
 Returns all the block categories.
 
 _Returns_
 
--   `Array<Object>`: Block categories.
+-   `Array<WPBlockCategory>`: Block categories.
 
 <a name="getChildBlockNames" href="#getChildBlockNames">#</a> **getChildBlockNames**
 
@@ -395,19 +428,7 @@ _Returns_
 
 <a name="getPhrasingContentSchema" href="#getPhrasingContentSchema">#</a> **getPhrasingContentSchema**
 
-Get schema of possible paths for phrasing content.
-
-_Related_
-
--   <https://developer.mozilla.org/en-US/docs/Web/Guide/HTML/Content_categories#Phrasing_content>
-
-_Parameters_
-
--   _context_ `string`: Set to "paste" to exclude invisible elements and sensitive data.
-
-_Returns_
-
--   `Object`: Schema.
+Undocumented declaration.
 
 <a name="getPossibleBlockTransformations" href="#getPossibleBlockTransformations">#</a> **getPossibleBlockTransformations**
 
@@ -573,7 +594,21 @@ _Returns_
 
 <a name="parse" href="#parse">#</a> **parse**
 
-Parses the post content with a PegJS grammar and returns a list of blocks.
+Utilizes an optimized token-driven parser based on the Gutenberg grammar spec
+defined through a parsing expression grammar to take advantage of the regular
+cadence provided by block delimiters -- composed syntactically through HTML
+comments -- which, given a general HTML document as an input, returns a block
+list array representation.
+
+This is a recursive-descent parser that scans linearly once through the input
+document. Instead of directly recursing it utilizes a trampoline mechanism to
+prevent stack overflow. This initial pass is mainly interested in separating
+and isolating the blocks serialized in the document and manifestly not in the
+content within the blocks.
+
+_Related_
+
+-   <https://developer.wordpress.org/block-editor/packages/packages-block-serialization-default-parser/>
 
 _Parameters_
 
@@ -608,7 +643,7 @@ _Parameters_
 -   _options.plainText_ `[string]`: Plain text version.
 -   _options.mode_ `[string]`: Handle content as blocks or inline content. _ 'AUTO': Decide based on the content passed. _ 'INLINE': Always handle as inline content, and return string. \* 'BLOCKS': Always handle as blocks, and return array of blocks.
 -   _options.tagName_ `[Array]`: The tag into which content will be inserted.
--   _options.canUserUseUnfilteredHTML_ `[boolean]`: Whether or not the user can use unfiltered HTML.
+-   _options.preserveWhiteSpace_ `[boolean]`: Whether or not to preserve consequent white space.
 
 _Returns_
 
@@ -633,8 +668,10 @@ Registers a new block collection to group blocks in the same namespace in the in
 
 _Parameters_
 
--   _namespace_ `string`: The namespace to group blocks by in the inserter; corresponds to the block namespace
--   _settings_ `Object`: An object composed of a title to show in the inserter, and an icon to show in the inserter
+-   _namespace_ `string`: The namespace to group blocks by in the inserter; corresponds to the block namespace.
+-   _settings_ `Object`: The block collection settings.
+-   _settings.title_ `string`: The title to display in the block inserter.
+-   _settings.icon_ `[Object]`: The icon to display in the block inserter.
 
 <a name="registerBlockStyle" href="#registerBlockStyle">#</a> **registerBlockStyle**
 
@@ -660,6 +697,15 @@ _Returns_
 
 -   `?WPBlock`: The block, if it has been successfully registered; otherwise `undefined`.
 
+<a name="registerBlockVariation" href="#registerBlockVariation">#</a> **registerBlockVariation**
+
+Registers a new block variation for the given block type.
+
+_Parameters_
+
+-   _blockName_ `string`: Name of the block (example: “core/columns”).
+-   _variation_ `WPBlockVariation`: Object describing a block variation.
+
 <a name="serialize" href="#serialize">#</a> **serialize**
 
 Takes a block or set of blocks and returns the serialized post content.
@@ -679,7 +725,7 @@ Sets the block categories.
 
 _Parameters_
 
--   _categories_ `Array<Object>`: Block categories.
+-   _categories_ `Array<WPBlockCategory>`: Block categories.
 
 <a name="setDefaultBlockName" href="#setDefaultBlockName">#</a> **setDefaultBlockName**
 
@@ -712,6 +758,18 @@ Assigns name of block handling unregistered block types.
 _Parameters_
 
 -   _blockName_ `string`: Block name.
+
+<a name="store" href="#store">#</a> **store**
+
+Store definition for the blocks namespace.
+
+_Related_
+
+-   <https://github.com/WordPress/gutenberg/blob/HEAD/packages/data/README.md#createReduxStore>
+
+_Type_
+
+-   `Object` 
 
 <a name="switchToBlockType" href="#switchToBlockType">#</a> **switchToBlockType**
 
@@ -765,6 +823,15 @@ _Returns_
 
 -   `?WPBlock`: The previous block value, if it has been successfully unregistered; otherwise `undefined`.
 
+<a name="unregisterBlockVariation" href="#unregisterBlockVariation">#</a> **unregisterBlockVariation**
+
+Unregisters a block variation defined for the given block type.
+
+_Parameters_
+
+-   _blockName_ `string`: Name of the block (example: “core/columns”).
+-   _variationName_ `string`: Name of the variation defined for the block.
+
 <a name="updateCategory" href="#updateCategory">#</a> **updateCategory**
 
 Updates a category.
@@ -772,7 +839,7 @@ Updates a category.
 _Parameters_
 
 -   _slug_ `string`: Block category slug.
--   _category_ `Object`: Object containing the category properties that should be updated.
+-   _category_ `WPBlockCategory`: Object containing the category properties that should be updated.
 
 <a name="withBlockContentContext" href="#withBlockContentContext">#</a> **withBlockContentContext**
 

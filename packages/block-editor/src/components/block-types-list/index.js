@@ -2,39 +2,52 @@
  * WordPress dependencies
  */
 import { getBlockMenuDefaultClassName } from '@wordpress/blocks';
+import {
+	__unstableComposite as Composite,
+	__unstableUseCompositeState as useCompositeState,
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import InserterListItem from '../inserter-list-item';
 
-function BlockTypesList( { items, onSelect, onHover = () => {}, children } ) {
+function BlockTypesList( {
+	items = [],
+	onSelect,
+	onHover = () => {},
+	children,
+	label,
+	isDraggable = true,
+} ) {
+	const composite = useCompositeState();
 	return (
 		/*
 		 * Disable reason: The `list` ARIA role is redundant but
 		 * Safari+VoiceOver won't announce the list otherwise.
 		 */
 		/* eslint-disable jsx-a11y/no-redundant-roles */
-		<ul role="list" className="block-editor-block-types-list">
-			{ items && items.map( ( item ) =>
-				<InserterListItem
-					key={ item.id }
-					className={ getBlockMenuDefaultClassName( item.id ) }
-					icon={ item.icon }
-					onClick={ () => {
-						onSelect( item );
-						onHover( null );
-					} }
-					onFocus={ () => onHover( item ) }
-					onMouseEnter={ () => onHover( item ) }
-					onMouseLeave={ () => onHover( null ) }
-					onBlur={ () => onHover( null ) }
-					isDisabled={ item.isDisabled }
-					title={ item.title }
-				/>
-			) }
+		<Composite
+			{ ...composite }
+			role="listbox"
+			className="block-editor-block-types-list"
+			aria-label={ label }
+		>
+			{ items.map( ( item ) => {
+				return (
+					<InserterListItem
+						key={ item.id }
+						item={ item }
+						className={ getBlockMenuDefaultClassName( item.id ) }
+						onSelect={ onSelect }
+						onHover={ onHover }
+						composite={ composite }
+						isDraggable={ isDraggable }
+					/>
+				);
+			} ) }
 			{ children }
-		</ul>
+		</Composite>
 		/* eslint-enable jsx-a11y/no-redundant-roles */
 	);
 }

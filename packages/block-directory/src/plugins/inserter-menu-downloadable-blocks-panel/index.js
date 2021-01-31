@@ -21,26 +21,31 @@ function InserterMenuDownloadableBlocksPanel() {
 
 	return (
 		<__experimentalInserterMenuExtension>
-			{
-				( { onSelect, onHover, filterValue, hasItems } ) => {
-					if ( hasItems || ! filterValue ) {
-						return null;
-					}
-
-					if ( debouncedFilterValue !== filterValue ) {
-						debouncedSetFilterValue( filterValue );
-					}
-
-					return (
-						<DownloadableBlocksPanel
-							onSelect={ onSelect }
-							onHover={ onHover }
-							filterValue={ debouncedFilterValue }
-							isWaiting={ filterValue !== debouncedFilterValue }
-						/>
-					);
+			{ ( {
+				onSelect,
+				onHover,
+				filterValue,
+				hasItems,
+				rootClientId,
+			} ) => {
+				if ( hasItems || ! filterValue ) {
+					return null;
 				}
-			}
+
+				if ( debouncedFilterValue !== filterValue ) {
+					debouncedSetFilterValue( filterValue );
+				}
+
+				return (
+					<DownloadableBlocksPanel
+						onSelect={ onSelect }
+						onHover={ onHover }
+						rootClientId={ rootClientId }
+						filterValue={ debouncedFilterValue }
+						isWaiting={ filterValue !== debouncedFilterValue }
+					/>
+				);
+			} }
 		</__experimentalInserterMenuExtension>
 	);
 }
